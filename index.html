@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Peachtree FRC Teams - TEST</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 1rem;
+    }
+    h1 {
+      text-align: center;
+    }
+    #teamList {
+      margin-top: 1rem;
+    }
+    .team {
+      border: 1px solid #ccc;
+      margin-bottom: 1rem;
+      padding: 1rem;
+      border-radius: 5px;
+    }
+    .team h2 {
+      margin: 0 0 0.5rem 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Peachtree FRC Teams - TEST WEBSITE</h1>
+  
+  <button id="refreshBtn">Refresh Team List</button>
+  <div id="teamList"></div>
+  
+  <script>
+    async function fetchTeams() {
+      const teamList = document.getElementById('teamList');
+      teamList.innerHTML = '<p>Loading teams...</p>';
+      
+      try {
+        // Make an HTTP GET request to your server's API endpoint
+        // Adjust the URL if your API is located elsewhere
+        const response = await fetch('/api/teams'); 
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        
+        const data = await response.json();
+        displayTeams(data);
+      } catch (error) {
+        console.error(error);
+        teamList.innerHTML = '<p>Failed to load team data. Please try again later.</p>';
+      }
+    }
+    
+    function displayTeams(teams) {
+      const teamList = document.getElementById('teamList');
+      teamList.innerHTML = ''; // Clear existing content
+      
+      if (!Array.isArray(teams) || teams.length === 0) {
+        teamList.innerHTML = '<p>No team data available.</p>';
+        return;
+      }
+
+      teams.forEach(team => {
+        const teamDiv = document.createElement('div');
+        teamDiv.className = 'team';
+        
+        teamDiv.innerHTML = `
+          <h2>Team ${team.team_number}: ${team.nickname}</h2>
+          <p><strong>Rank:</strong> ${team.rank}</p>
+          <p><strong>Wins:</strong> ${team.wins}</p>
+          <p><strong>Losses:</strong> ${team.losses}</p>
+          <p><strong>Ties:</strong> ${team.ties}</p>
+          <p><strong>Ranking Points:</strong> ${team.ranking_points}</p>
+        `;
+        
+        teamList.appendChild(teamDiv);
+      });
+    }
+    
+    // Fetch teams on page load
+    window.addEventListener('DOMContentLoaded', fetchTeams);
+
+    // Fetch teams again when the "Refresh Team List" button is clicked
+    document.getElementById('refreshBtn').addEventListener('click', fetchTeams);
+  </script>
+</body>
+</html>

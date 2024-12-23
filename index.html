@@ -2,43 +2,114 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Peachtree FRC Teams - TEST</title>
+  <title>Peachtree FRC Teams - Dark Mode</title>
   <style>
+    /* Dark mode styling */
     body {
+      background-color: #1e1e1e;  /* Dark grey background */
+      color: #f0f0f0;            /* Light text for contrast */
       font-family: Arial, sans-serif;
-      margin: 1rem;
+      margin: 2rem;
     }
+
     h1 {
       text-align: center;
+      color: #ffffff;
     }
+
+    /* Container for input + buttons */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .controls > * {
+      margin: 0.5rem;
+    }
+
+    /* Textbox for Team Number */
+    #teamInput {
+      padding: 0.5rem;
+      font-size: 1rem;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background-color: #2e2e2e;
+      color: #f0f0f0;
+      outline: none;
+    }
+
+    #teamInput:focus {
+      border-color: #6a95ff;
+    }
+
+    /* Buttons */
+    button {
+      padding: 0.6rem 1rem;
+      font-size: 1rem;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+      background-color: #444;
+      transition: background-color 0.2s ease;
+    }
+
+    button:hover {
+      background-color: #666;
+    }
+
     #teamList {
       margin-top: 1rem;
     }
+
     .team {
-      border: 1px solid #ccc;
+      border: 1px solid #555;
+      background-color: #2e2e2e;
       margin-bottom: 1rem;
       padding: 1rem;
-      border-radius: 5px;
+      border-radius: 8px;
     }
+
     .team h2 {
       margin: 0 0 0.5rem 0;
+      color: #ffffff;
+    }
+
+    .team p {
+      margin: 0.3rem 0;
     }
   </style>
 </head>
 <body>
-  <h1>Peachtree FRC Teams - TEST WEBSITE</h1>
-  
-  <button id="refreshBtn">Refresh Team List</button>
+  <h1>Peachtree FRC Teams - Dark Mode</h1>
+
+  <div class="controls">
+    <!-- Input field for team number -->
+    <input
+      type="number"
+      id="teamInput"
+      placeholder="Enter team number..."
+      min="1"
+    />
+
+    <!-- Button to add (POST) a new team -->
+    <button id="addTeamBtn">Add Team</button>
+
+    <!-- Existing Refresh button for GET requests -->
+    <button id="refreshBtn">Refresh Team List</button>
+  </div>
+
   <div id="teamList"></div>
   
   <script>
+    // Fetch and display the list of teams (GET /api/teams)
     async function fetchTeams() {
       const teamList = document.getElementById('teamList');
       teamList.innerHTML = '<p>Loading teams...</p>';
       
       try {
-        // Make an HTTP GET request to your server's API endpoint
-        // Adjust the URL if your API is located elsewhere
         const response = await fetch('/api/teams'); 
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -51,7 +122,8 @@
         teamList.innerHTML = '<p>Failed to load team data. Please try again later.</p>';
       }
     }
-    
+
+    // Display the team data in the #teamList container
     function displayTeams(teams) {
       const teamList = document.getElementById('teamList');
       teamList.innerHTML = ''; // Clear existing content
@@ -77,12 +149,40 @@
         teamList.appendChild(teamDiv);
       });
     }
-    
-    // Fetch teams on page load
+
+    // Send POST request to add a new team (POST /api/teams/<team_number>)
+    async function addTeam() {
+      const teamNumberInput = document.getElementById('teamInput');
+      const teamNumber = teamNumberInput.value.trim();
+
+      if (!teamNumber) {
+        alert('Please enter a valid team number.');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/teams/${teamNumber}`, {
+          method: 'POST'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to add team ${teamNumber}.`);
+        }
+
+        alert(`Team ${teamNumber} added!`);
+        teamNumberInput.value = ''; // Clear the input
+        fetchTeams(); // Refresh the team list
+      } catch (error) {
+        console.error(error);
+        alert('An error occurred while adding the team. Check the console for details.');
+      }
+    }
+
+    // Attach event listeners
     window.addEventListener('DOMContentLoaded', fetchTeams);
 
-    // Fetch teams again when the "Refresh Team List" button is clicked
     document.getElementById('refreshBtn').addEventListener('click', fetchTeams);
+    document.getElementById('addTeamBtn').addEventListener('click', addTeam);
   </script>
 </body>
 </html>

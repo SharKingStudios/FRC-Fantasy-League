@@ -5,6 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.service import Service
 import os
 import time
 
@@ -31,7 +32,7 @@ def safe_click(driver, element):
         # Attempt to click the element
         try:
             element.click()
-            print("Element clicked successfully.")
+            # print("Element clicked successfully.")
         except:
             js_click_element(driver, element)
             print("Error with clicking, clicked via JavaScript.")
@@ -66,7 +67,7 @@ def remove_all_overlays(driver):
             for overlay in overlays:
                 driver.execute_script("arguments[0].remove();", overlay)
                 print(f"Overlay of class {overlay_class} removed.")
-        print("All overlays removed.")
+        # print("All overlays removed.")
     except Exception as e:
         print(f"Error removing overlays: {e}")
 
@@ -353,8 +354,13 @@ def create_card(
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--ignore-certificate-errors")
-    # chrome_options.add_argument("--headless")  # Run headless for server use
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+    chrome_options.add_argument("--window-size=1920,5000")
+    chrome_options.add_argument("--force-device-scale-factor=1")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.198 Safari/537.36")
+    chrome_options.binary_location = "/home/sharkingstudios/ungoogled-chromium-114/ungoogled-chromium_114.0.5735.198-1.1_linux/chrome"
 
     # Set the download directory
     prefs = {
@@ -378,9 +384,10 @@ def create_card(
             print(f"Deleted existing file: {path}")
 
     # Initialize WebDriver
-    driver = webdriver.Chrome(options=chrome_options)
+    service = Service("/home/sharkingstudios/chromedriver/chromedriver")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     # driver = webdriver.Chrome(
-    # executable_path="~/frcfantasyserver/FRC-Fantasy-League/api/chromedriver",
+    # executable_path="~/frcfantasyserver/FRC-Fantasy-League/api/bin/chromedriver-linux64/chromedriver",
     # options=chrome_options)
 
 
@@ -393,33 +400,67 @@ def create_card(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
         # Fill text fields
-        def fill_field(field_id, value):
-            # Locate the field
-            field = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, field_id))
-            )
-            # Clear the field
+        def fill_field(driver, field_id, value):
             try:
-                field.clear()  # Try native clear
-            except:
-                pass  # Ignore errors if .clear() fails
+                # Wait for the field to be clickable
+                field = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.ID, field_id))
+                )
+                # Scroll into view
+                driver.execute_script("arguments[0].scrollIntoView(true);", field)
 
-            # Ensure it's cleared using backspace
-            field.send_keys(Keys.CONTROL + "a")  # Select all
-            field.send_keys(Keys.BACKSPACE)
+                # Clear the field
+                try:
+                    field.clear()
+                    print(f"Cleared field '{field_id}' using clear().")
+                except:
+                    print(f"Failed to clear field '{field_id}' using clear(). Attempting alternative methods.")
 
-            # Ensure it's cleared using JS
-            driver.execute_script("arguments[0].value = '';", field)
+                # Use send_keys to clear
+                field.send_keys(Keys.CONTROL + "a")
+                field.send_keys(Keys.BACKSPACE)
+                print(f"Cleared field '{field_id}' using keyboard shortcuts.")
 
-            # Enter new value
-            field.send_keys(value)
+                # Clear via JavaScript as a last resort
+                driver.execute_script("arguments[0].value = '';", field)
+                print(f"Cleared field '{field_id}' using JavaScript.")
+
+                # Enter the new value
+                field.send_keys(value)
+                print(f"Filled field '{field_id}' with value '{value}'.")
+
+            except Exception as e:
+                print(f"Error filling field '{field_id}': {e}")
+                # driver.save_screenshot(f"{field_id}_error_screenshot.png")
+                raise
+
 
 
         def remove_obstructing_iframe(driver):
             try:
+                driver.execute_script("""
+                const selectors = [
+                    'iframe',
+                    '.fc-dialog-overlay',
+                    '.fc-consent-root',
+                    '.cookie-banner',
+                    '.popup',
+                    '.modal',
+                    '.overlay',
+                    '.banner',
+                    '.backdrop',
+                    '.popup-container',
+                    '.chakra-modal__body',  // Specific to Chakra UI if used
+                    '.chakra-toast',        // Toast notifications
+                    '.chakra-alert'         // Alert dialogs
+                ];
+                selectors.forEach(selector => {
+                    document.querySelectorAll(selector).forEach(el => el.remove());
+                });
+                """)
                 iframe = driver.find_element(By.TAG_NAME, "iframe")
                 driver.execute_script("arguments[0].remove();", iframe)
-                print("Obstructing iframe removed.")
+                # print("Obstructing iframe removed.")
             except Exception as e:
                 print("No obstructing iframe found.")
 
@@ -427,62 +468,102 @@ def create_card(
             try:
                 # Locate the parent container by the label
                 parent_div = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located(
+                    EC.element_to_be_clickable(
                         (By.XPATH, f"//label[text()='{label_text}']/following-sibling::div//div[contains(@class, 'css-5bhydl')]")
                     )
                 )
                 # Scroll into view and use safe_click
                 safe_click(driver, parent_div)
+                print(f"Clicked on '{label_text}' dropdown.")
+                # driver.save_screenshot(f"{label_text}_clicked.png")  # Screenshot after clicking
 
-                # Wait for the dropdown options to appear
-                options_xpath = f"//div[contains(@class, 'css-j7qwjs') and normalize-space(text())='{option_text}']"
-                option = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, options_xpath))
+                # Wait for options to appear
+                options = WebDriverWait(driver, 10).until(
+                    EC.presence_of_all_elements_located(
+                        (By.XPATH, f"//div[contains(@class, 'css-j7qwjs') and not(contains(@class, 'disabled'))]")
+                    )
                 )
+                # Log available options
+                available_options = [option.text for option in options]
+                print(f"Available options for '{label_text}': {available_options}")
+                # driver.save_screenshot(f"{label_text}_options.png")  # Screenshot of options
 
-                # Scroll to the option and use safe_click
-                safe_click(driver, option)
+                # Find and click the desired option using partial matching
+                for option in options:
+                    if option_text in option.text.strip():
+                        safe_click(driver, option)
+                        print(f"Selected '{option_text}' from '{label_text}' dropdown.")
+                        # driver.save_screenshot(f"{label_text}_selected.png")  # Screenshot after selection
+                        return  # Exit after successful selection
+
+                # If the desired option isn't found
+                raise Exception(f"Option '{option_text}' not found in '{label_text}' dropdown.")
+
             except Exception as e:
                 print(f"Failed to select from dropdown '{label_text}'. Error: {e}")
+                # driver.save_screenshot(f"{label_text}_error_screenshot.png")
+                raise  # Re-raise the exception to halt execution or handle upstream
+
+
 
         # Use the functions
+        time.sleep(4) # Worth a shot
 
         # Fill out the dropdowns
         # Select Base Set dropdown
         select_custom_dropdown_by_label(driver, "Base set", base_set)
+        print("Base set selected.")
 
         # Select Type dropdown
         select_custom_dropdown_by_label(driver, "Type", type_)
+        print("Type selected.")
 
         # Select Subtype dropdown
         select_custom_dropdown_by_label(driver, "Subtype", subtype)
+        print("Subtype selected.")
 
         # Select Variation dropdown
         select_custom_dropdown_by_label(driver, "Variation", variation)
+        print("Variation selected.")
 
         # Select Rarity dropdown
+        remove_obstructing_iframe(driver)
         select_custom_dropdown_by_label(driver, "Rarity", rarity)
+        print("Rarity selected.")
 
         # Select Weakness Type dropdown
         remove_obstructing_iframe(driver)
         select_custom_dropdown_by_label(driver, "Weakness Type", weakness_type)
+        print("Weakness Type selected.")
 
         # Select Resistance Type dropdown
         remove_obstructing_iframe(driver)
         select_custom_dropdown_by_label(driver, "Resistance Type", resistance_type)
+        print("Resistance Type selected.")
 
         # Fill out the form
-        fill_field("name-input", name)
-        fill_field("hitpoints-input", hitpoints)
-        fill_field("subname-input", subname)
-        fill_field("dexStatsCustom-input", custom_label)
-        fill_field("weaknessAmount-input", weakness_amt)
-        fill_field("illustrator-input", illustrator)
-        fill_field("customSetIconText-input", icon_text)
-        fill_field("dexEntry-input", flavor_text)
-        fill_field("cardNumber-input", team_number)
-        fill_field("totalInSet-input", total_number_in_set)
-        fill_field("resistanceAmount-input", resistance_amt)
+        fill_field(driver, "name-input", name)
+        print('Name filled')
+        fill_field(driver, "hitpoints-input", hitpoints)
+        print("Hitpoints filled")
+        fill_field(driver, "subname-input", subname)
+        print("Subname filled")
+        fill_field(driver, "dexStatsCustom-input", custom_label)
+        print("Custom Label filled")
+        fill_field(driver, "weaknessAmount-input", weakness_amt)
+        print("Weakness Amount filled")
+        fill_field(driver, "illustrator-input", illustrator)
+        print("Illustrator filled")
+        fill_field(driver, "customSetIconText-input", icon_text)
+        print("Icon Text filled")
+        fill_field(driver, "dexEntry-input", flavor_text)
+        print("Flavor Text filled")
+        fill_field(driver, "cardNumber-input", team_number)
+        print("Card Number filled")
+        fill_field(driver, "totalInSet-input", total_number_in_set)
+        print("Icon Text filled")
+        fill_field(driver, "resistanceAmount-input", resistance_amt)
+        print("Resistance Amount filled")
         # fill_field("retreat-cost-input", retreat_cost)
 
 
@@ -536,7 +617,10 @@ def create_card(
 
     except Exception as e:
         print(f"Error creating card: {e}")
-        return None
+        driver.save_screenshot("error_screenshot.png")
+        print("Screenshot saved as 'error_screenshot.png'")
+        raise
+        # return None
     finally:
         driver.quit()
 

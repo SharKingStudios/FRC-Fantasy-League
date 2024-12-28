@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fantasy FRC - Admin Console</title>
+  <style>
+    /* Same dark theme as index.html */
+    body {
+      background-color: #1e1e1e;
+      color: #f0f0f0;
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+    }
+
+    h1, h2 {
+      color: #ffffff;
+      text-align: center;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .controls > * {
+      margin: 0.5rem;
+    }
+
+    button {
+      padding: 0.6rem 1rem;
+      font-size: 1rem;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+      background-color: #444;
+      transition: background-color 0.2s ease;
+    }
+
+    button:hover {
+      background-color: #666;
+    }
+
+    input, select, textarea {
+      padding: 0.5rem;
+      font-size: 1rem;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background-color: #2e2e2e;
+      color: #f0f0f0;
+      outline: none;
+      margin-right: 0.5rem;
+    }
+
+    input[type="file"] {
+      border: none;
+    }
+
+    input:focus, textarea:focus {
+      border-color: #6a95ff;
+    }
+
+    /* Console log area */
+    #logArea {
+      width: 90%;
+      max-width: 800px;
+      margin: 1rem auto;
+      border: 1px solid #555;
+      border-radius: 8px;
+      background-color: #2e2e2e;
+      padding: 1rem;
+      overflow-y: auto;
+      max-height: 300px; /* scroll if content is long */
+    }
+
+    #logArea p {
+      margin: 0.5rem 0;
+      font-family: monospace;
+      color: #fff;
+    }
+
+    /* Teams CSV table */
+    #teamsTable {
+      width: 90%;
+      max-width: 800px;
+      margin: 1rem auto;
+      border: 1px solid #555;
+      border-radius: 8px;
+      background-color: #2e2e2e;
+      padding: 1rem;
+      overflow-x: auto;
+    }
+
+    #teamsTable table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    #teamsTable table thead {
+      background-color: #444;
+    }
+
+    #teamsTable th, #teamsTable td {
+      padding: 0.5rem;
+      border: 1px solid #555;
+      text-align: left;
+    }
+
+    /* Upload section */
+    .upload-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 1rem;
+    }
+
+    .upload-section > div {
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Fantasy FRC - Admin Console</h1>
+
+  <!-- SECTION 1: Update All Cards / Update Specific Card -->
+  <div class="controls">
+    <!-- Button: Update All Cards -->
+    <button id="updateAllBtn">Update All Cards</button>
+
+    <!-- Button + Textbox: Update One Card -->
+    <input type="number" id="teamNumberInput" placeholder="Team # for single update" />
+    <button id="updateOneBtn">Update One Card</button>
+  </div>
+
+  <!-- Log area (to show server responses or any debug info) -->
+  <div id="logArea">
+    <h2>Console Log</h2>
+  </div>
+
+  <!-- SECTION 2: Upload Robot Image -->
+  <div class="upload-section">
+    <h2>Upload Robot Image</h2>
+    <div>
+      <input type="number" id="uploadTeamNumber" placeholder="Team #..." />
+    </div>
+    <div>
+      <input type="file" id="robotImageFile" accept="image/*" />
+    </div>
+    <div>
+      <button id="uploadImageBtn">Upload Image</button>
+    </div>
+  </div>
+
+  <!-- SECTION 3: View (and eventually edit) teams.csv data -->
+  <div id="teamsTable">
+    <h2>Teams CSV</h2>
+    <!-- We will fetch and display CSV rows in a table here. -->
+    <table>
+      <thead id="teamsTableHead"></thead>
+      <tbody id="teamsTableBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    /***********************************************************************
+     * UTILITY: logToConsole
+     *  Appends a message to our #logArea for debug info.
+     ***********************************************************************/
+    function logToConsole(message) {
+      const logArea = document.getElementById('logArea');
+      const p = document.createElement('p');
+      p.textContent = message;
+      logArea.appendChild(p);
+      // Auto-scroll to bottom
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    /***********************************************************************
+     * 1. UPDATE ALL CARDS
+     *    - Calls some endpoint (e.g., POST /api/admin/updateAllCards)
+     *    - Expects JSON response with statuses
+     ***********************************************************************/
+    async function updateAllCards() {
+      logToConsole("Sending request to update all cards...");
+
+      try {
+        // Placeholder: Adjust endpoint to match your Lua backend route
+        const response = await fetch('/api/admin/updateAllCards', {
+          method: 'POST'
+        });
+        if (!response.ok) {
+          throw new Error(`Update all cards failed: ${response.statusText}`);
+        }
+        const data = await response.json();
+        logToConsole("Update All Cards Response: " + JSON.stringify(data, null, 2));
+
+        // If the response includes info about each team, you can loop
+        // data.forEach(entry => {
+        //   logToConsole(`Team ${entry.team_number}: ${entry.status}`);
+        // });
+
+      } catch (error) {
+        logToConsole("Error updating all cards: " + error);
+      }
+    }
+
+    /***********************************************************************
+     * 2. UPDATE ONE CARD
+     *    - Calls an endpoint (e.g., POST /api/admin/updateCard/<team_number>)
+     *    - Expects JSON or text response
+     ***********************************************************************/
+    async function updateOneCard() {
+      const teamNumber = document.getElementById('teamNumberInput').value.trim();
+      if (!teamNumber) {
+        return logToConsole("Please enter a team number.");
+      }
+
+      logToConsole("Sending request to update card for Team " + teamNumber);
+
+      try {
+        // Placeholder: Adjust endpoint to match your Lua backend route
+        const response = await fetch(`/api/admin/updateCard/${teamNumber}`, {
+          method: 'POST'
+        });
+        if (!response.ok) {
+          throw new Error(`Update card for Team ${teamNumber} failed: ${response.statusText}`);
+        }
+        const data = await response.text();
+        logToConsole("Update One Card Response: " + data);
+      } catch (error) {
+        logToConsole("Error updating card for Team " + teamNumber + ": " + error);
+      }
+    }
+
+    /***********************************************************************
+     * 3. UPLOAD ROBOT IMAGE
+     *    - We want to POST an image file to the server, e.g. /api/admin/uploadImage
+     *    - We also include the team number in the request
+     ***********************************************************************/
+    async function uploadRobotImage() {
+      const teamNum = document.getElementById('uploadTeamNumber').value.trim();
+      const fileInput = document.getElementById('robotImageFile');
+      if (!teamNum) {
+        return logToConsole("Please enter a team number before uploading an image.");
+      }
+      if (!fileInput.files || fileInput.files.length === 0) {
+        return logToConsole("Please select an image file.");
+      }
+
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('teamNumber', teamNum);
+      formData.append('robotImage', file);
+
+      logToConsole(`Uploading image for Team ${teamNum}: ${file.name}`);
+
+      try {
+        // Placeholder: Adjust endpoint to match your Lua backend route
+        const response = await fetch('/api/admin/uploadRobotImage', {
+          method: 'POST',
+          body: formData
+        });
+        if (!response.ok) {
+          throw new Error(`Image upload failed: ${response.statusText}`);
+        }
+        const data = await response.text();
+        logToConsole("Upload response: " + data);
+      } catch (error) {
+        logToConsole("Error uploading image: " + error);
+      }
+    }
+
+    /***********************************************************************
+     * 4. VIEW TEAMS.CSV
+     *    - We want to retrieve the teams.csv content from /api/teams.csv
+     *    - Then display it in a simple table (like a read-only spreadsheet)
+     ***********************************************************************/
+    async function fetchTeamsCSV() {
+      try {
+        // This is a direct request to fetch the CSV. 
+        // If your server serves /api/teams.csv as text/csv:
+        const response = await fetch('/api/teams.csv');
+        if (!response.ok) {
+          throw new Error("Failed to fetch teams.csv");
+        }
+        const csvText = await response.text();
+        displayTeamsCSV(csvText);
+      } catch (error) {
+        logToConsole("Error fetching teams.csv: " + error);
+      }
+    }
+
+    /***********************************************************************
+     * 5. DISPLAY TEAMS.CSV
+     *    - Parse CSV text into rows/columns, then render in an HTML table
+     ***********************************************************************/
+    function displayTeamsCSV(csvText) {
+      const lines = csvText.split("\n").map(line => line.trim()).filter(line => !!line);
+      if (lines.length < 1) {
+        return logToConsole("teams.csv is empty or invalid.");
+      }
+
+      const headerLine = lines[0];
+      const headers = headerLine.split(",");
+      // Clear any existing table content
+      document.getElementById('teamsTableHead').innerHTML = "";
+      document.getElementById('teamsTableBody').innerHTML = "";
+
+      // Render header
+      const theadRow = document.createElement('tr');
+      headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        theadRow.appendChild(th);
+      });
+      document.getElementById('teamsTableHead').appendChild(theadRow);
+
+      // Render rows
+      for (let i = 1; i < lines.length; i++) {
+        const row = document.createElement('tr');
+        const cells = lines[i].split(",");
+
+        for (let j = 0; j < headers.length; j++) {
+          const td = document.createElement('td');
+          td.textContent = cells[j] || "";
+          row.appendChild(td);
+        }
+        document.getElementById('teamsTableBody').appendChild(row);
+      }
+    }
+
+    /***********************************************************************
+     * ATTACH EVENT LISTENERS AND INITIAL FETCH
+     ***********************************************************************/
+    window.addEventListener('DOMContentLoaded', () => {
+      // Buttons
+      document.getElementById('updateAllBtn').addEventListener('click', updateAllCards);
+      document.getElementById('updateOneBtn').addEventListener('click', updateOneCard);
+      document.getElementById('uploadImageBtn').addEventListener('click', uploadRobotImage);
+
+      // Load the teams.csv table upon page load
+      fetchTeamsCSV();
+    });
+  </script>
+</body>
+</html>

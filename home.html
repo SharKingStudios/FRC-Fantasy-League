@@ -1,12 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>PCH Fantasy FRC</title>
+  <meta charset="UTF-8" />
+  <title>Home - Fantasy FRC</title>
   <style>
     body {
-      margin: 0;
-      padding: 0;
       background: #1e1e1e;
       background-size: 100px 100px;
       background-color: #1e1e1e;
@@ -16,14 +14,8 @@
       background-image: -o-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
       background-image: linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
       color: #f0f0f0;
-      font-family: Roboto, sans-serif;
+      font-family: Arial, sans-serif;
       margin: 2rem;
-      transition: background-color 0.3s ease;
-      overflow-x: hidden; /* Prevent horizontal scroll */
-    }
-    h1, h2{
-      text-align: center;
-      color: #fff;
     }
     .controls {
       display: flex;
@@ -32,6 +24,18 @@
     }
     .controls > * {
       margin: 0.5rem;
+    }
+    #market, #inventory {
+      width: 90%;
+      max-width: 800px;
+      margin: 1rem auto;
+      border: 1px solid #555;
+      border-radius: 8px;
+      background-color: #2e2e2e;
+      padding: 1rem;
+    }
+    #market h2, #inventory h2 {
+      margin-top: 0;
     }
     button {
       padding: 0.6rem 1rem;
@@ -48,7 +52,7 @@
     }
 
     /* Grid container for teams */
-    #teamList {
+    .teamList {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
@@ -187,54 +191,223 @@
       justify-content: center;
       align-items: center;
     }
+
+    .card-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .card-list div {
+      /* margin: 0.5rem;
+      padding: 0.5rem;
+      border: 1px solid #555;
+      background: #1e1e1e;
+      background-color: #1e1e1e; */
+      /* background-image:
+        linear-gradient(rgba(255,255,255,.25) 2px, transparent 2px),
+        linear-gradient(90deg, rgba(255,255,255,.25) 2px, transparent 2px),
+        linear-gradient(rgba(255,255,255,.14) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.14) 1px, transparent 1px);
+      background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+      background-position: -2px -2px, -2px -2px, -1px -1px, -1px -1px; */
+      background-color: #2e2e2e;
+      border: 1px solid #555;
+      border-radius: 8px;
+      width: 220px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden; /* Prevent children from extending outside bounds */
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      perspective: 1000px; /* For 3D tilt of child */
+    }
+    .msg {
+      color: #f0f0f0;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
-  <div id="centeredbox">
-    <div class="controls">
-      <h1>Welcome to PCH Fantasy FRC</h1>
-      <button onclick="window.location.href='/login.html';"><strong>Login</strong></button>
-      <button onclick="window.location.href='/signup.html';"><strong>Sign Up</strong></button>
-    </div>
-    <h2>What is PCH Fantasy FRC?</h2>
-  
-    <p>PCH Fantasy FRC is a fantasy FIRST Robotics Competition (FRC) game where you can draft teams and earn points based on their performance in the Peachtree District (PCH) events.</p>
-    <p>Use the buttons above to log in or sign up to get started!</p>
-    <p><strong>Note: Rankings and images are currently determined by 2024 event statistics and will switch over before the first PCH event.</strong></p>
-  </div>
-
   <div class="controls">
-    <h2>Teams in PCH District:</h2>
-    <button id="refreshBtn">Refresh Team List</button>
+    <h1>Welcome to PCH Fantasy FRC - Home</h1>
+    <button onclick="logout()"><strong>Log Out</strong></button>
   </div>
 
-  <div id="teamList"></div>
+  <div id="market">
+    <h2>Top Selling Cards</h2>
+    <div class="teamList" id="marketCards"></div>
+  </div>
+
+  <div id="inventory">
+    <h2>Your Inventory (Max 6 Cards)</h2>
+    <div class="teamList" id="inventoryCards"></div>
+  </div>
 
   <div id="overlay" onclick="closeOverlay(event)">
     <img id="overlayImage" class="overlayImage" src="" alt="Zoomed Robot Card">
   </div>
 
+  <div class="msg" id="message"></div>
+
   <script>
-    // Fetch data
-    async function fetchTeams() {
-      const teamList = document.getElementById('teamList');
-      teamList.innerHTML = '<p>Loading teams...</p>';
+    let sessionToken = "";
+
+    async function logout() {
       try {
-        const response = await fetch('/api/teams');
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const data = await response.json();
-        displayTeams(data);
-      } catch (error) {
-        console.error(error);
-        teamList.innerHTML = '<p>Failed to load team data. Please try again later.</p>';
+        // Possibly pass sessionToken as header or query param
+        await fetch('/api/logout?token=' + encodeURIComponent(sessionToken));
+        // Clear local storage
+        localStorage.removeItem('session_token');
+        window.location.href = "login.html";
+      } catch (err) {
+        document.getElementById('message').textContent = "Logout error: " + err;
       }
     }
 
-    function displayTeams(teams) {
-      const teamList = document.getElementById('teamList');
+    async function loadMarket() {
+      try {
+        // Fetch market cards
+        const marketResponse = await fetch('/api/market/top');
+        if (!marketResponse.ok) {
+          throw new Error(`Market fetch failed: ${marketResponse.statusText}`);
+        }
+        const marketCards = await marketResponse.json(); // e.g., [{team_number: "1771", ...}]
+
+        // Fetch all teams data
+        const teamsResponse = await fetch('/api/teams');
+        if (!teamsResponse.ok) {
+          throw new Error(`Teams fetch failed: ${teamsResponse.statusText}`);
+        }
+        const teams = await teamsResponse.json(); // e.g., [{team_number: "1771", nickname: "North Gwinnett Robotics", ...}]
+
+        // Enrich market cards with team data
+        const enrichedMarketCards = marketCards.map(card => {
+          const teamData = teams.find(team => team.team_number === card.team_number);
+          return { ...card, ...teamData }; // Merge team data into the card
+        });
+
+        displayMarket(enrichedMarketCards);
+      } catch (err) {
+        document.getElementById('message').textContent = "Market error: " + err;
+      }
+    }
+
+
+    function renderMarket(cards) {
+      const container = document.getElementById('marketCards');
+      container.innerHTML = "";
+      cards.forEach(card => {
+        const div = document.createElement('div');
+        div.textContent = card.id + " - " + card.name;
+        container.appendChild(div);
+      });
+    }
+
+    function displayMarket(teams) {
+      const teamList = document.getElementById('marketCards');
       teamList.innerHTML = '';
+
+      if (!Array.isArray(teams) || teams.length === 0) {
+        teamList.innerHTML = '<p>No team data available.</p>';
+        return;
+      }
+
+      teams.forEach(team => {
+        const tile = document.createElement('div');
+        tile.className = 'team';
+
+        const title = document.createElement('h2');
+        title.innerHTML = `Team ${team.team_number}<br>${team.nickname}`;
+
+        // Image container with perspective
+        const imgContainer = document.createElement('div');
+        imgContainer.className = 'image-container';
+        imgContainer.addEventListener('mousemove', onCardMouseMove);
+        imgContainer.addEventListener('mouseleave', onCardMouseLeave);
+
+        const imgElement = document.createElement('img');
+        imgElement.className = 'robot-card';
+        imgElement.alt = `Team ${team.team_number} Robot Card`;
+        imgElement.src = `/api/robotCards/${team.team_number}.png`;
+        imgElement.onerror = function() {
+          this.onerror = null;
+          this.src = '/api/robotCards/default.png';
+        };
+
+        const statsDiv = document.createElement('div');
+        statsDiv.className = 'stats';
+        statsDiv.innerHTML = `
+          <strong>W/L/T:</strong> ${team.wins}/${team.losses}/${team.ties}<br>
+          <strong>RP:</strong> ${team.ranking_points}
+        `;
+
+        tile.addEventListener('click', () => {
+          openOverlay(team);
+        });
+
+        imgContainer.appendChild(imgElement);
+        tile.appendChild(title);
+        tile.appendChild(imgContainer);
+        tile.appendChild(statsDiv);
+
+        teamList.appendChild(tile);
+      });
+    }
+
+    async function loadInventory() {
+      try {
+        // Fetch user's inventory
+        const inventoryResponse = await fetch('/api/user/inventory?token=' + encodeURIComponent(sessionToken));
+        if (!inventoryResponse.ok) {
+          throw new Error(`Inventory fetch failed: ${inventoryResponse.statusText}`);
+        }
+        const inventoryCardIds = await inventoryResponse.json(); // e.g., ["{\"team_number\":\"1771\"}"]
+
+        // Parse inventory JSON strings into objects
+        const parsedInventoryCardIds = inventoryCardIds.map(card =>
+          typeof card === 'string' ? JSON.parse(card) : card
+        ); // Result: [{ team_number: "1771" }]
+
+        // Fetch all teams data
+        const teamsResponse = await fetch('/api/teams');
+        if (!teamsResponse.ok) {
+          throw new Error(`Teams fetch failed: ${teamsResponse.statusText}`);
+        }
+        const teams = await teamsResponse.json(); // e.g., [{team_number: "1771", nickname: "North Gwinnett Robotics", ...}]
+
+        // Enrich inventory cards with team data
+        const enrichedInventory = parsedInventoryCardIds.map(card => {
+          const teamData = teams.find(team => team.team_number === card.team_number); // Match by team_number
+          return { ...card, ...teamData }; // Merge team data into the inventory card
+        });
+
+        displayInventory(enrichedInventory);
+      } catch (err) {
+        document.getElementById('message').textContent = "Inventory error: " + err.message;
+      }
+    }
+
+    function renderInventory(cardIds) {
+      const container = document.getElementById('inventoryCards');
+      container.innerHTML = "";
+      cardIds.forEach(id => {
+        const div = document.createElement('div');
+        div.textContent = "Card ID: " + id;
+        container.appendChild(div);
+      });
+    }
+
+    function displayInventory(teams) {
+      const teamList = document.getElementById('inventoryCards');
+      teamList.innerHTML = '';
+
+      teams = teams.map(team => (typeof team === 'string' ? JSON.parse(team) : team));
 
       if (!Array.isArray(teams) || teams.length === 0) {
         teamList.innerHTML = '<p>No team data available.</p>';
@@ -344,8 +517,19 @@
       overlayImgContainer.removeEventListener('mouseleave', onCardMouseLeave);
     }
 
-    window.addEventListener('DOMContentLoaded', fetchTeams);
-    document.getElementById('refreshBtn').addEventListener('click', fetchTeams);
+
+    window.addEventListener('DOMContentLoaded', () => {
+      sessionToken = localStorage.getItem('session_token');
+      if (!sessionToken) {
+        // not logged in
+        window.location.href = "login.html";
+        return;
+      }
+      // load top market
+      loadMarket();
+      // load user inventory
+      loadInventory();
+    });
   </script>
 </body>
 </html>

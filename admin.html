@@ -4,30 +4,34 @@
   <meta charset="UTF-8" />
   <title>Fantasy FRC - Admin Console</title>
   <style>
-    /* Same dark theme as index.html */
+    /* Dark theme + styling, same as before */
     body {
+      background: #1e1e1e;
       background-color: #1e1e1e;
+      background-size: 100px 100px;
+      background-color: #1e1e1e;
+      background-image: -webkit-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      background-image: -moz-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      background-image: -ms-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      background-image: -o-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      background-image: linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
       color: #f0f0f0;
       font-family: Arial, sans-serif;
       margin: 2rem;
     }
-
     h1, h2 {
       color: #ffffff;
       text-align: center;
     }
-
     .controls {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
       margin-bottom: 1.5rem;
     }
-
     .controls > * {
       margin: 0.5rem;
     }
-
     button {
       padding: 0.6rem 1rem;
       font-size: 1rem;
@@ -38,11 +42,9 @@
       background-color: #444;
       transition: background-color 0.2s ease;
     }
-
     button:hover {
       background-color: #666;
     }
-
     input, select, textarea {
       padding: 0.5rem;
       font-size: 1rem;
@@ -53,11 +55,9 @@
       outline: none;
       margin-right: 0.5rem;
     }
-
     input[type="file"] {
       border: none;
     }
-
     input:focus, textarea:focus {
       border-color: #6a95ff;
     }
@@ -72,9 +72,8 @@
       background-color: #2e2e2e;
       padding: 1rem;
       overflow-y: auto;
-      max-height: 300px; /* scroll if content is long */
+      max-height: 300px;
     }
-
     #logArea p {
       margin: 0.5rem 0;
       font-family: monospace;
@@ -92,16 +91,13 @@
       padding: 1rem;
       overflow-x: auto;
     }
-
     #teamsTable table {
       width: 100%;
       border-collapse: collapse;
     }
-
     #teamsTable table thead {
       background-color: #444;
     }
-
     #teamsTable th, #teamsTable td {
       padding: 0.5rem;
       border: 1px solid #555;
@@ -115,48 +111,99 @@
       align-items: center;
       margin-top: 1rem;
     }
-
     .upload-section > div {
       margin-bottom: 0.5rem;
+    }
+
+    /* Job list styling */
+    #jobList {
+      width: 90%;
+      max-width: 800px;
+      margin: 1rem auto;
+      border: 1px solid #555;
+      border-radius: 8px;
+      background-color: #2e2e2e;
+      padding: 1rem;
+    }
+    #jobList table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    #jobList th, #jobList td {
+      padding: 0.5rem;
+      border: 1px solid #555;
+      text-align: left;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 0.5rem;
     }
   </style>
 </head>
 <body>
   <h1>Fantasy FRC - Admin Console</h1>
 
-  <!-- SECTION 1: Update All Cards / Update Specific Card -->
+  <!-- Controls to Update All Cards or One Card -->
   <div class="controls">
-    <!-- Button: Update All Cards -->
-    <button id="updateAllBtn">Update All Cards</button>
-
-    <!-- Button + Textbox: Update One Card -->
+    <button id="updateAllAsyncBtn">Update All Cards (Async)</button>
     <input type="number" id="teamNumberInput" placeholder="Team # for single update" />
-    <button id="updateOneBtn">Update One Card</button>
+    <button id="updateOneAsyncBtn">Update One Card (Async)</button>
   </div>
 
-  <!-- Log area (to show server responses or any debug info) -->
+  <!-- SECTION: Job List -->
+  <div id="jobList">
+    <h2>Active / Recent Jobs</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Job Title</th>
+          <th>Job ID</th>
+          <th>Status</th>
+          <th>Run Time</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody id="jobListBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Log area -->
   <div id="logArea">
     <h2>Console Log</h2>
   </div>
 
-  <!-- SECTION 2: Upload Robot Image -->
+  <!-- Upload Robot Image -->
   <div class="upload-section">
     <h2>Upload Robot Image</h2>
     <div>
       <input type="number" id="uploadTeamNumber" placeholder="Team #..." />
-    </div>
-    <div>
       <input type="file" id="robotImageFile" accept="image/*" />
-    </div>
-    <div>
       <button id="uploadImageBtn">Upload Image</button>
     </div>
   </div>
 
-  <!-- SECTION 3: View (and eventually edit) teams.csv data -->
+  <div>
+    <h2>Add New Team</h2>
+    <div class="controls">
+      <!-- Input field for team number -->
+      <input
+        type="number"
+        id="teamInput"
+        placeholder="Team #..."
+        min="1"
+      />
+  
+      <!-- Button to add (POST) a new team -->
+      <button id="addTeamBtn">Add Team</button>
+    </div>
+  </div>
+
+  <!-- Teams CSV display -->
   <div id="teamsTable">
     <h2>Teams CSV</h2>
-    <!-- We will fetch and display CSV rows in a table here. -->
     <table>
       <thead id="teamsTableHead"></thead>
       <tbody id="teamsTableBody"></tbody>
@@ -165,79 +212,267 @@
 
   <script>
     /***********************************************************************
-     * UTILITY: logToConsole
-     *  Appends a message to our #logArea for debug info.
+     * INTERNAL JOB-TRACKING
      ***********************************************************************/
+    const activeJobs = {};
+
     function logToConsole(message) {
       const logArea = document.getElementById('logArea');
       const p = document.createElement('p');
       p.textContent = message;
       logArea.appendChild(p);
-      // Auto-scroll to bottom
       logArea.scrollTop = logArea.scrollHeight;
     }
 
     /***********************************************************************
-     * 1. UPDATE ALL CARDS
-     *    - Calls some endpoint (e.g., POST /api/admin/updateAllCards)
-     *    - Expects JSON response with statuses
+     * HELPER: Create a colored dot
      ***********************************************************************/
-    async function updateAllCards() {
-      logToConsole("Sending request to update all cards...");
+    function createStatusDot(status) {
+      const dot = document.createElement('span');
+      dot.classList.add('status-dot');
+      let color = '#888'; // default grey
+      if (status === 'running') color = 'yellow';
+      else if (status === 'OK') color = 'limegreen';
+      else if (status === 'ERROR') color = 'red';
+      dot.style.backgroundColor = color;
+      return dot;
+    }
 
-      try {
-        // Placeholder: Adjust endpoint to match your Lua backend route
-        const response = await fetch('/api/admin/updateAllCards', {
-          method: 'POST'
-        });
-        if (!response.ok) {
-          throw new Error(`Update all cards failed: ${response.statusText}`);
-        }
-        const data = await response.json();
-        logToConsole("Update All Cards Response: " + JSON.stringify(data, null, 2));
-
-        // If the response includes info about each team, you can loop
-        // data.forEach(entry => {
-        //   logToConsole(`Team ${entry.team_number}: ${entry.status}`);
-        // });
-
-      } catch (error) {
-        logToConsole("Error updating all cards: " + error);
+    /***********************************************************************
+     * HELPER: Format run time as mm:ss or just seconds
+     ***********************************************************************/
+    function formatRunTime(ms) {
+      // 'ms' is difference in milliseconds
+      const totalSec = Math.floor(ms / 1000);
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      if (min > 0) {
+        return `${min}m ${sec}s`;
+      } else {
+        return `${sec}s`;
       }
     }
 
     /***********************************************************************
-     * 2. UPDATE ONE CARD
-     *    - Calls an endpoint (e.g., POST /api/admin/updateCard/<team_number>)
-     *    - Expects JSON or text response
+     * RENDER the jobList table
+     * For each job in activeJobs, create/ update a row
      ***********************************************************************/
-    async function updateOneCard() {
+    function renderJobList() {
+      const tbody = document.getElementById('jobListBody');
+      tbody.innerHTML = ''; // clear
+
+      for (const jobId in activeJobs) {
+        const job = activeJobs[jobId];
+
+        const tr = document.createElement('tr');
+
+        // Job Title cell
+        const titleTd = document.createElement('td');
+        titleTd.textContent = job.description;
+        tr.appendChild(titleTd);
+
+        // Job ID
+        const idTd = document.createElement('td');
+        idTd.textContent = jobId;
+        tr.appendChild(idTd);
+
+        // Status
+        const statusTd = document.createElement('td');
+        const dot = createStatusDot(job.status);
+        statusTd.appendChild(dot);
+        const textSpan = document.createElement('span');
+        textSpan.textContent = job.status;
+        statusTd.appendChild(textSpan);
+        tr.appendChild(statusTd);
+
+        // Run Time
+        const runTimeTd = document.createElement('td');
+        if (job.run_time != null) {
+          // multiply by 1000 to convert seconds -> ms
+          const ms = job.run_time * 1000;
+          runTimeTd.textContent = formatRunTime(ms);
+        } else {
+          runTimeTd.textContent = "0s";
+        }
+        tr.appendChild(runTimeTd);
+
+        // Detail
+        const detailTd = document.createElement('td');
+        detailTd.textContent = job.detail || '';
+        tr.appendChild(detailTd);
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    /***********************************************************************
+     * PERIODIC UPDATE of run time
+     ***********************************************************************/
+    setInterval(() => {
+      // re-render job list => if any job is "running", we show updated local time
+      renderJobList();
+    }, 1000);
+
+    /***********************************************************************
+     * pollJobStatus
+     * We add a job to activeJobs, then poll /api/admin/jobStatus/<jobId>
+     ***********************************************************************/
+    function pollJobStatus(jobId, jobDescription) {
+      // create local record
+      activeJobs[jobId] = {
+        jobId,
+        description: jobDescription,
+        status: 'running',
+        startTime: Date.now(),  // local start
+        detail: ''
+      };
+      renderJobList();
+
+      // poll every 2s
+      const intervalId = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/admin/jobStatus/${jobId}`);
+          if (response.status === 404) {
+            logToConsole(`[${jobDescription}] => Job ID ${jobId} not found.`);
+            delete activeJobs[jobId];
+            clearInterval(intervalId);
+            renderJobList();
+            return;
+          }
+          if (!response.ok) {
+            throw new Error(`Failed to get job status: ${response.statusText}`);
+          }
+          const data = await response.json();
+          if (data.status === 'running') {
+            activeJobs[jobId].status = 'running';
+            activeJobs[jobId].run_time = data.run_time;
+            renderJobList();
+          } else if (data.status === 'OK') {
+            activeJobs[jobId].status = 'OK';
+            activeJobs[jobId].run_time = data.run_time;
+            activeJobs[jobId].detail = data.detail || '';
+            clearInterval(intervalId);
+            renderJobList();
+          } else if (data.status === 'ERROR') {
+            activeJobs[jobId].status = 'ERROR';
+            activeJobs[jobId].run_time = data.run_time;
+            activeJobs[jobId].detail = data.detail || '';
+            clearInterval(intervalId);
+            renderJobList();
+          }
+        } catch (err) {
+          logToConsole(`[${jobDescription}] => Error polling job status: ` + err);
+          delete activeJobs[jobId];
+          clearInterval(intervalId);
+          renderJobList();
+        }
+      }, 2000);
+    }
+
+    /***********************************************************************
+     * 1) fetchJobsCSV
+     *    We do NOT display it, but parse it to see job_id and status
+     ***********************************************************************/
+    async function fetchJobsCSV() {
+      try {
+        const response = await fetch('/api/admin/jobs.csv'); 
+        // or /api/admin/jobs => if your server returns CSV or direct
+        if (!response.ok) {
+          throw new Error(`Failed to fetch jobs.csv: ${response.statusText}`);
+        }
+        const text = await response.text();
+        parseJobsCSV(text);
+      } catch (error) {
+        logToConsole("Error fetching jobs.csv: " + error);
+      }
+    }
+
+    /***********************************************************************
+     * 2) parseJobsCSV
+     *    For each row: if status=queued or running, pollJobStatus(...)
+     ***********************************************************************/
+    function parseJobsCSV(csvText) {
+      // convert to lines
+      const lines = csvText.split('\n').map(l => l.trim()).filter(l => !!l);
+      if (lines.length < 2) {
+        logToConsole("jobs.csv empty or no data.");
+        return;
+      }
+      // first line is headers
+      const headers = lines[0].split(',');
+      // find indices for job_id, status, job_type
+      const jobIdIdx = headers.indexOf('job_id');
+      const statusIdx = headers.indexOf('status');
+      const typeIdx   = headers.indexOf('job_type');
+
+      for (let i = 1; i < lines.length; i++) {
+        const rowParts = lines[i].split(',');
+        const job_id    = rowParts[jobIdIdx];
+        const job_status= rowParts[statusIdx];
+        const job_type  = rowParts[typeIdx] || "unknown";
+
+        // If job is queued or running, let's poll it
+        if (job_status === 'queued' || job_status === 'running' || job_status === 'ERROR' || job_status === 'OK') {
+          // If we are not already tracking this job in activeJobs, start polling
+          if (!activeJobs[job_id]) {
+            logToConsole(`Found job_id=${job_id} with status=${job_status}. Polling now.`);
+            pollJobStatus(job_id, job_type);
+          }
+        }
+      }
+    }
+
+    /***********************************************************************
+     * updateAllCardsAsync
+     ***********************************************************************/
+    async function updateAllCardsAsync() {
+      logToConsole("Sending async request to update all cards...");
+      try {
+        const response = await fetch('/api/admin/asyncUpdateAllCards', {
+          method: 'POST'
+        });
+        if (response.status === 202) {
+          const data = await response.json();
+          const jobId = data.job_id;
+          logToConsole("UpdateAllCards => job accepted, jobId=" + jobId);
+          pollJobStatus(jobId, "updateAllCards");
+        } else {
+          throw new Error(`Expected 202, got ${response.status}`);
+        }
+      } catch (error) {
+        logToConsole("Error (async) updating all cards: " + error);
+      }
+    }
+
+    /***********************************************************************
+     * updateOneCardAsync
+     ***********************************************************************/
+    async function updateOneCardAsync() {
       const teamNumber = document.getElementById('teamNumberInput').value.trim();
       if (!teamNumber) {
         return logToConsole("Please enter a team number.");
       }
-
-      logToConsole("Sending request to update card for Team " + teamNumber);
+      logToConsole("Sending async request to update card for Team " + teamNumber);
 
       try {
-        // Placeholder: Adjust endpoint to match your Lua backend route
-        const response = await fetch(`/api/admin/updateCard/${teamNumber}`, {
+        const response = await fetch(`/api/admin/asyncUpdateCard/${teamNumber}`, {
           method: 'POST'
         });
-        if (!response.ok) {
-          throw new Error(`Update card for Team ${teamNumber} failed: ${response.statusText}`);
+        if (response.status === 202) {
+          const data = await response.json();
+          const jobId = data.job_id;
+          logToConsole(`Async update for Team ${teamNumber} => job accepted, jobId=${jobId}`);
+          pollJobStatus(jobId, `updateOneCard-${teamNumber}`);
+        } else {
+          throw new Error(`Expected 202, got ${response.status}`);
         }
-        const data = await response.text();
-        logToConsole("Update One Card Response: " + data);
       } catch (error) {
-        logToConsole("Error updating card for Team " + teamNumber + ": " + error);
+        logToConsole("Error (async) updating card for Team " + teamNumber + ": " + error);
       }
     }
 
     /***********************************************************************
-     * 3. UPLOAD ROBOT IMAGE
-     *    - We want to POST an image file to the server, e.g. /api/admin/uploadImage
-     *    - We also include the team number in the request
+     * uploadRobotImage
      ***********************************************************************/
     async function uploadRobotImage() {
       const teamNum = document.getElementById('uploadTeamNumber').value.trim();
@@ -257,7 +492,6 @@
       logToConsole(`Uploading image for Team ${teamNum}: ${file.name}`);
 
       try {
-        // Placeholder: Adjust endpoint to match your Lua backend route
         const response = await fetch('/api/admin/uploadRobotImage', {
           method: 'POST',
           body: formData
@@ -273,14 +507,10 @@
     }
 
     /***********************************************************************
-     * 4. VIEW TEAMS.CSV
-     *    - We want to retrieve the teams.csv content from /api/teams.csv
-     *    - Then display it in a simple table (like a read-only spreadsheet)
+     * fetchTeamsCSV & displayTeamsCSV
      ***********************************************************************/
     async function fetchTeamsCSV() {
       try {
-        // This is a direct request to fetch the CSV. 
-        // If your server serves /api/teams.csv as text/csv:
         const response = await fetch('/api/teams.csv');
         if (!response.ok) {
           throw new Error("Failed to fetch teams.csv");
@@ -292,19 +522,13 @@
       }
     }
 
-    /***********************************************************************
-     * 5. DISPLAY TEAMS.CSV
-     *    - Parse CSV text into rows/columns, then render in an HTML table
-     ***********************************************************************/
     function displayTeamsCSV(csvText) {
       const lines = csvText.split("\n").map(line => line.trim()).filter(line => !!line);
       if (lines.length < 1) {
         return logToConsole("teams.csv is empty or invalid.");
       }
-
       const headerLine = lines[0];
       const headers = headerLine.split(",");
-      // Clear any existing table content
       document.getElementById('teamsTableHead').innerHTML = "";
       document.getElementById('teamsTableBody').innerHTML = "";
 
@@ -331,17 +555,53 @@
       }
     }
 
+    // Send POST request to add a new team (POST /api/teams/<team_number>)
+    async function addTeam() {
+      const teamNumberInput = document.getElementById('teamInput');
+      const teamNumber = teamNumberInput.value.trim();
+
+      if (!teamNumber) {
+        alert('Please enter a valid team number.');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/teams/${teamNumber}`, {
+          method: 'POST'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to add team ${teamNumber}.`);
+        }
+
+        alert(`Team ${teamNumber} added!`);
+        teamNumberInput.value = ''; // Clear the input
+      } catch (error) {
+        console.error(error);
+        alert('An error occurred while adding the team. Check the console for details.');
+      }
+    }
+
     /***********************************************************************
-     * ATTACH EVENT LISTENERS AND INITIAL FETCH
+     * INIT
      ***********************************************************************/
     window.addEventListener('DOMContentLoaded', () => {
       // Buttons
-      document.getElementById('updateAllBtn').addEventListener('click', updateAllCards);
-      document.getElementById('updateOneBtn').addEventListener('click', updateOneCard);
+      document.getElementById('updateAllAsyncBtn').addEventListener('click', updateAllCardsAsync);
+      document.getElementById('updateOneAsyncBtn').addEventListener('click', updateOneCardAsync);
       document.getElementById('uploadImageBtn').addEventListener('click', uploadRobotImage);
+      document.getElementById('addTeamBtn').addEventListener('click', addTeam);
 
-      // Load the teams.csv table upon page load
+      // Load teams.csv
       fetchTeamsCSV();
+      setInterval(fetchTeamsCSV, 10000);
+      setInterval(fetchJobsCSV, 10000);
+
+      // Also fetch the jobs.csv so we can poll any queued/running
+      fetchJobsCSV(); 
+      // Optionally do it again every so often if new jobs appear that 
+      // server hasn't told us about:
+      // setInterval(fetchJobsCSV, 10000);
     });
   </script>
 </body>

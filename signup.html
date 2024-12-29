@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Sign Up</title>
+  <style>
+    body {
+      background: #1e1e1e;
+      background-size: 100px 100px;
+      background-color: #1e1e1e;
+      background-image: -webkit-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      background-image: -moz-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      background-image: -ms-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      background-image: -o-linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      background-image: linear-gradient(-45deg, rgba(144, 144, 144, .2) 25%, transparent 25%, transparent 50%, rgba(144, 144, 144, .2) 50%, rgba(144, 144, 144, .2) 75%, transparent 75%, transparent);
+      color: #f0f0f0;
+      font-family: Roboto, sans-serif;
+      margin: 2rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    label, input, button {
+      display: block;
+      margin: 0.5rem 0;
+    }
+    input {
+      background: #2e2e2e;
+      color: #f0f0f0;
+      border: 1px solid #555;
+      padding: 0.5rem;
+    }
+    button {
+      padding: 0.6rem 1rem;
+      font-size: 1rem;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+      background-color: #444;
+      transition: background-color 0.2s ease;
+    }
+    button:hover {
+      background-color: #666;
+    }
+
+    .msg {
+      margin-top: 1rem;
+      color: #f0f0f0;
+    }
+
+    #signupbox {
+      width: 100%;
+      max-width: 800px;
+      margin: 1rem auto;
+      border: 1px solid #555;
+      border-radius: 8px;
+      background-color: #2e2e2e;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="signupbox">
+    <h1>Sign Up</h1>
+    <label for="username">Username:</label>
+    <input type="text" id="username" />
+    <label for="password">Password:</label>
+    <input type="password" id="password" />
+    <button onclick="register()"><strong>Create Account</strong></button>
+    
+    <div class="msg" id="message"></div>
+    <p>Already have an account?</p>
+    <button onclick="window.location.href='/login.html';"><strong>Login</strong></button>
+  </div>
+
+  <script>
+    async function register() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!username || !password) {
+        document.getElementById('message').textContent = "Both fields are required.";
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text);
+        }
+        const text = await response.text();
+        document.getElementById('message').textContent = text;
+        // maybe redirect to login.html
+      } catch (err) {
+        document.getElementById('message').textContent = "Error: " + err;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,6 +1,4 @@
--- ==========================
--- 1. Configuration
--- ==========================
+-- server.lua
 local user = "sharkingstudios"
 local EVENT_YEAR = "2024"
 
@@ -12,20 +10,14 @@ package.path = package.path
 package.cpath = package.cpath
   .. ";/home/" .. user .. "/.luarocks/lib/lua/5.3/?.so"
 
--- ==========================
--- 2. Required Modules
--- ==========================
 local socket = require("socket")
 local json = require("dkjson")
+local lfs = require("lfs")  -- or omit if not needed
 local http_request = require("http.request")
-local lfs = require("lfs")
-local lanes = require("lanes").configure()
 
--- Replace with your Blue Alliance API key
-local API_KEY = os.getenv("TBA_API_KEY")
 
 -- ==========================
--- 3. Folders & Setup
+-- Folders & Setup
 -- ==========================
 local cards_folder = "./robotCards"
 if not lfs.attributes(cards_folder, "mode") then
@@ -37,156 +29,123 @@ if not lfs.attributes(robot_images_folder, "mode") then
   lfs.mkdir(robot_images_folder)
 end
 
--- ==========================
--- 4. Helper: read/write JSON Card
--- ==========================
-local function get_robot_card(team_number)
-  local card_path = cards_folder .. "/" .. team_number .. ".json"
-  local file = io.open(card_path, "r")
-  if file then
-    local content = file:read("*a")
+local USERS_CSV = "users.csv"
+
+-- Ensure users.csv has a proper header if it doesn't exist
+do
+  local file = io.open(USERS_CSV, "r")
+  if not file then
+    local f = io.open(USERS_CSV, "w")
+    if f then
+      -- EXACT columns: "username,password_hash,session_token,cards_owned,money"
+      f:write("username,password_hash,session_token,cards_owned,money\n")
+      f:close()
+    end
+  else
     file:close()
-    return json.decode(content)
   end
-  return nil
 end
 
-local function save_robot_card(team_number, card_data)
-  local card_path = cards_folder .. "/" .. team_number .. ".json"
-  local file = io.open(card_path, "w")
-  if file then
-    file:write(json.encode(card_data))
+
+-- CSV utilities for jobs
+local function read_jobs_csv(filename)
+  local file = io.open(filename, "r")
+  if not file then
+    return {}, {}
+  end
+  local lines = {}
+  for line in file:lines() do
+    table.insert(lines, line)
+  end
+  file:close()
+
+  if #lines == 0 then
+    return {}, {}
+  end
+
+  -- Assume the first line is headers: job_id,job_type,status,job_data
+  local headers = {}
+  for header in string.gmatch(lines[1], "([^,]+)") do
+    table.insert(headers, header)
+  end
+
+  local rows = {}
+  for i = 2, #lines do
+    local fields = {}
+    for field in string.gmatch(lines[i], "([^,]+)") do
+      table.insert(fields, field)
+    end
+    local row = {}
+    for idx, h in ipairs(headers) do
+      row[h] = fields[idx] or ""
+    end
+    table.insert(rows, row)
+  end
+  return rows, headers
+end
+
+local function write_jobs_csv(filename, rows, headers)
+  local file = io.open(filename, "w")
+  if not file then
+    return
+  end
+  file:write(table.concat(headers, ",") .. "\n")
+  for _, row in ipairs(rows) do
+    local line_parts = {}
+    for _, h in ipairs(headers) do
+      table.insert(line_parts, row[h] or "")
+    end
+    file:write(table.concat(line_parts, ",") .. "\n")
+  end
+  file:close()
+end
+
+local JOBS_CSV = "jobs.csv"
+
+-- Make sure there's a header row if the file doesn't exist
+do
+  local file = io.open(JOBS_CSV, "r")
+  if not file then
+    local f = io.open(JOBS_CSV, "w")
+    if f then
+      f:write("job_id,job_type,status,job_data\n")
+      f:close()
+    end
+  else
     file:close()
-    return true
   end
-  return false
 end
 
--- ==========================
--- 5. TBA Helper Functions
--- ==========================
-local function tba_get(path)
-  local url = "https://www.thebluealliance.com/api/v3/" .. path
-  local req = http_request.new_from_uri(url)
-  req.headers:upsert(":method", "GET")
-  req.headers:upsert("x-tba-auth-key", API_KEY)
+-- Utility: create a new job row
+local function create_job(job_type, job_data_table)
+  local rows, headers = read_jobs_csv(JOBS_CSV)
 
-  local headers, stream = req:go()
-  if not headers then
-    print("Error fetching " .. path .. ": request failed.")
-    return nil
+  -- Ensure the new columns exist if they're not there yet
+  -- e.g. job_id,job_type,status,job_data,created_at,done_at
+  local needed_cols = {"job_id","job_type","status","job_data","created_at","done_at"}
+  local header_map = {}
+  for _, h in ipairs(headers) do
+    header_map[h] = true
   end
-
-  local body = stream:get_body_as_string()
-  stream:shutdown()
-  return json.decode(body)
-end
-
--- ==========================
--- 6. Team Data (Fetch from TBA)
--- ==========================
-local function fetch_district_points(team_number)
-  local districts = tba_get("team/frc" .. team_number .. "/districts")
-  if not districts then return 0 end
-
-  for _, district in ipairs(districts) do
-    if district.year == tonumber(EVENT_YEAR) then
-      local district_key = district.key
-      local district_ranking = tba_get("district/" .. district_key .. "/rankings")
-      if district_ranking then
-        for _, rank_entry in ipairs(district_ranking) do
-          if rank_entry.team_key == "frc" .. team_number then
-            return rank_entry.point_total or 0
-          end
-        end
-      end
+  for _, col in ipairs(needed_cols) do
+    if not header_map[col] then
+      table.insert(headers, col)
+      header_map[col] = true
     end
   end
-  return 0
-end
 
-local function fetch_team_data(team_number)
-  local team_info = tba_get("team/frc" .. team_number)
-  if not team_info then return nil end
-
-  local events = tba_get("team/frc" .. team_number .. "/events/" .. EVENT_YEAR)
-  if not events or #events == 0 then
-    return {
-      team_number = team_info.team_number or team_number,
-      nickname = team_info.nickname or "",
-      city = team_info.city or "",
-      rookie_year = team_info.rookie_year or 0,
-      rank = 0, wins=0, losses=0, ties=0, ranking_points=0
-    }
-  end
-
-  local best_rank = 999999
-  local total_wins, total_losses, total_ties = 0, 0, 0
-
-  for _, ev in ipairs(events) do
-    if ev.event_type == 99 then
-      -- Skip off-season events
-      goto continue
-    end
-
-    local status_info = tba_get("team/frc" .. team_number .. "/event/" .. ev.key .. "/status")
-    if status_info then
-      local qual_ranking = status_info.qual and status_info.qual.ranking
-      local qual_record  = (qual_ranking and qual_ranking.record) or {}
-      local qual_rank    = (qual_ranking and qual_ranking.rank)   or 999999
-
-      local playoff      = status_info.playoff
-      local playoff_rec  = (playoff and playoff.record) or {}
-
-      local eventWins   = (qual_record.wins   or 0) + (playoff_rec.wins   or 0)
-      local eventLosses = (qual_record.losses or 0) + (playoff_rec.losses or 0)
-      local eventTies   = (qual_record.ties   or 0) + (playoff_rec.ties   or 0)
-
-      if qual_rank < best_rank then
-        best_rank = qual_rank
-      end
-
-      total_wins   = total_wins   + eventWins
-      total_losses = total_losses + eventLosses
-      total_ties   = total_ties   + eventTies
-
-      print(string.format(
-        "Event %s => Q+P record: %d-%d-%d, rank=%d => totals: %d-%d-%d",
-        ev.key, eventWins, eventLosses, eventTies, qual_rank, total_wins, total_losses, total_ties
-      ))
-    end
-
-    ::continue::
-  end
-
-  local district_points = fetch_district_points(team_number)
-
-  local combined = {
-    team_number    = team_info.team_number or team_number,
-    nickname       = team_info.nickname    or "",
-    city           = team_info.city        or "",
-    rookie_year    = team_info.rookie_year or 0,
-    rank           = best_rank < 999999 and best_rank or 0,
-    wins           = total_wins,
-    losses         = total_losses,
-    ties           = total_ties,
-    ranking_points = district_points
+  local job_id = tostring(math.random(1,999999999))
+  local new_job = {
+    job_id    = job_id,
+    job_type  = job_type,
+    status    = "queued",
+    job_data  = json.encode(job_data_table or {}),
+    created_at= tostring(os.time()),  -- store as string
+    done_at   = ""
   }
-
-  print("FINAL combined for frc" .. team_number .. ": " .. json.encode(combined))
-  return combined
-end
-
--- ==========================
--- 7. CSV Utility
--- ==========================
-local function row_to_csv(row, headers)
-  local parts = {}
-  for _, col in ipairs(headers) do
-    local value = row[col] or ""
-    table.insert(parts, tostring(value))
-  end
-  return table.concat(parts, ",")
+  table.insert(rows, new_job)
+  write_jobs_csv(JOBS_CSV, rows, headers)
+  return job_id
 end
 
 local function csv_to_row(line, headers)
@@ -231,69 +190,6 @@ local function read_csv(filename)
   return rows, headers
 end
 
-local function write_csv(filename, rows, headers)
-  local file = io.open(filename, "w")
-  if not file then
-    return
-  end
-
-  file:write(table.concat(headers, ",") .. "\n")
-  for _, row in ipairs(rows) do
-    local line = row_to_csv(row, headers)
-    file:write(line .. "\n")
-  end
-  file:close()
-end
-
--- ==========================
--- 8. Save to CSV
--- ==========================
-local function save_to_csv(team_data)
-  local filename = "teams.csv"
-  local rows, headers = read_csv(filename)
-
-  local required_cols = {
-    "team_number", "nickname", "city", "rookie_year",
-    "rank", "wins", "losses", "ties", "ranking_points"
-    -- Add extra columns if needed for card creation
-    -- e.g. 'image_path', 'hitpoints', 'flavor_text', etc.
-  }
-
-  local header_map = {}
-  for _, h in ipairs(headers) do
-    header_map[h] = true
-  end
-  for _, rc in ipairs(required_cols) do
-    if not header_map[rc] then
-      table.insert(headers, rc)
-      header_map[rc] = true
-    end
-  end
-
-  -- Convert rows into a map for quick lookup
-  local row_map = {}
-  for _, row in ipairs(rows) do
-    row_map[row.team_number] = row
-  end
-
-  local key = tostring(team_data.team_number)
-  local row = row_map[key]
-  if not row then
-    row = {}
-    row_map[key] = row
-    table.insert(rows, row)
-  end
-
-  for _, col in ipairs(required_cols) do
-    row[col] = team_data[col] or ""
-  end
-
-  write_csv(filename, rows, headers)
-end
-
--- ==========================
--- 9. Ranking
--- ==========================
 local function get_ranked_teams()
   local filename = "teams.csv"
   local rows, headers = read_csv(filename)
@@ -311,121 +207,90 @@ local function get_ranked_teams()
 end
 
 -- ==========================
--- 10. Integrate with Python Card Creator
+-- 0. Utilities for users.csv
 -- ==========================
---- Example function to POST data to the Python server at /create-card
-local function create_card_via_python(card_data)
-  local body = json.encode(card_data)
 
-  local req = http_request.new_from_uri("http://sharkingstudios.hackclub.app:8091/create-card")
-  req.headers:upsert(":method", "POST")
-  req.headers:upsert("content-type", "application/json")
-  req:set_body(body)
+local function read_users_csv(filename)
+  local file = io.open(filename, "r")
+  if not file then return {}, {} end
 
-  local headers, stream = req:go()
-  if not headers then
-    return false, "Failed to connect to python server"
-  end
-
-  local status = tonumber(headers:get(":status"))
-  local response_body = stream:get_body_as_string()
-  stream:shutdown()
-
-  if status ~= 200 then
-    return false, "Python server error: " .. tostring(status) .. " => " .. response_body
-  end
-
-  -- Parse JSON response
-  local resp_json = json.decode(response_body) or {}
-  if resp_json.status == "success" then
-    return true, resp_json.card_path
-  else
-    return false, resp_json.message or "Unknown error"
-  end
-end
-
--- Utility function to check if a file exists
-local function file_exists(path)
-  local file = io.open(path, "r")
-  if file then
-    file:close()
-    return true
-  else
-    return false
-  end
-end
-
--- Helper to read from CSV and build the JSON for the Python server
-local function build_card_data_from_csv(team_number)
-  -- This is where you shape the data for create_card
-  local rows, headers = read_csv("teams.csv")
-  
-  -- Create image path
-  for _, row in ipairs(rows) do
-    if row.team_number == tostring(team_number) then
-      -- Determine the image path
-      local image_path = row.image_path
-      if not image_path or image_path == "" then
-        -- Attempt to find a .png image
-        local png_path = "./images/robotImages/" .. row.team_number .. ".png"
-        if file_exists(png_path) then
-          image_path = png_path
-        else
-          -- Attempt to find a .jpeg image
-          local jpeg_path = "./images/robotImages/" .. row.team_number .. ".jpeg"
-          if file_exists(jpeg_path) then
-            image_path = jpeg_path
-          else
-            -- Handle the case where neither image exists
-            -- Option 1: Set to a default image
-            image_path = "./images/robotImages/default.png"  -- Ensure this default image exists
-            -- Option 2: Return an error or handle accordingly
-            -- return nil, "Image file not found for team number: " .. row.team_number
-          end
-        end
-      end
-
-      -- Return the structured data
-      return {
-        team_number = row.team_number,
-        team_name   = row.nickname or ("Team " .. row.team_number),
-        image_path  = image_path,
-        flavor_text = row.flavor_text or "",
-        hitpoints   = row.hitpoints or "150",
-        custom_label = "No." .. row.team_number .. "FRC",
-        image_x = row.image_x or 0,
-        image_y = row.image_y or 0,
-        image_zoom = row.image_zoom or 1.0
-        -- Add other fields as necessary
-      }
+  local lines = {}
+  for line in file:lines() do
+    line = line:match("^%s*(.-)%s*$")  -- trim whitespace
+    if line ~= "" then                -- skip empty lines
+      table.insert(lines, line)
     end
   end
+  file:close()
 
-  -- If the team number wasn't found in the CSV
-  return nil
-end
+  if #lines == 0 then return {}, {} end
 
-local function updateCardForTeam(team_number)
-  -- 1. Optionally, fetch/update from TBA
-  local tba_data = fetch_team_data(team_number)
-  if tba_data then
-    save_to_csv(tba_data)
+  local headers = {}
+  for h in string.gmatch(lines[1], "([^,]+)") do
+    table.insert(headers, h)
   end
 
-  -- 2. Build the card data from CSV
-  local card_data = build_card_data_from_csv(team_number)
-  if not card_data then
-    return false, "Team not found in CSV or missing image_path"
+  local rows = {}
+  for i=2, #lines do
+    local fields = {}
+    for f in string.gmatch(lines[i], "([^,]+)") do
+      table.insert(fields, f)
+    end
+
+    local row = {}
+    for idx, hdr in ipairs(headers) do
+      row[hdr] = fields[idx] or ""
+    end
+    table.insert(rows, row)
   end
 
-  -- 3. Call the python server
-  local success, result = create_card_via_python(card_data)
-  return success, result
+  return rows, headers
 end
 
--- ==========================
--- 11. Start Lua HTTP Server
--- ==========================
+local function write_users_csv(filename, rows, headers)
+  local file = io.open(filename, "w")
+  if not file then return end
+
+  -- Write the header line EXACTLY once
+  file:write(table.concat(headers, ",") .. "\n")
+
+  for _, row in ipairs(rows) do
+    -- build line in correct order
+    local lineParts = {}
+    for _, h in ipairs(headers) do
+      lineParts[#lineParts+1] = row[h] or ""
+    end
+    file:write(table.concat(lineParts, ",") .. "\n")
+  end
+
+  file:close()
+end
+
+
+-- trivial hash function (not secure!)
+local function simple_hash(str)
+  -- you'd want to do real hashing, e.g. with an external library
+  local sum = 0
+  for i=1,#str do
+    sum = (sum + str:byte(i)) % 65535
+  end
+  return tostring(sum)
+end
+
+-- find user by token
+local function find_user_by_token(token)
+  local rows, headers = read_users_csv(USERS_CSV)
+  for _, row in ipairs(rows) do
+    if row.session_token == token then
+      return row, rows, headers
+    end
+  end
+  return nil, rows, headers
+end
+
+-------------------------------------------------------------------------------
+-- Minimal HTTP server for incoming requests
+-------------------------------------------------------------------------------
 local server = assert(socket.bind("127.0.0.1", 8090))
 print("API Server running on 127.0.0.1:8090")
 
@@ -437,9 +302,6 @@ while true do
   if request then
     local method, path = request:match("^(%S+)%s(%S+)%sHTTP")
 
-    ------------------------------------------------------------------------------
-    -- Existing GET /api/teams (returns JSON array of teams from CSV)
-    ------------------------------------------------------------------------------
     if method == "GET" and path == "/api/teams" then
       local teams = get_ranked_teams()
       local json_response = json.encode(teams)
@@ -448,38 +310,24 @@ while true do
         .. json_response
       client:send(response)
 
-    ------------------------------------------------------------------------------
-    -- Existing POST /api/teams/<TEAM_NUMBER> (fetch from TBA, update CSV ranking)
-    ------------------------------------------------------------------------------
     elseif method == "POST" and path:match("^/api/teams/") then
       local team_number = tonumber(path:match("^/api/teams/(%d+)$"))
-      local team_data = fetch_team_data(team_number)
-      if team_data then
-        print("Saving team data for frc" .. team_number)
-        print("Data: " .. json.encode(team_data))
-        
-        -- 1. Save/update new team data
-        save_to_csv(team_data)
-        
-        -- 2. Resort entire CSV by ranking_points descending
-        local filename = "teams.csv"
-        local rows, headers = read_csv(filename)
-        table.sort(rows, function(a, b)
-          local rpA = tonumber(a.ranking_points) or 0
-          local rpB = tonumber(b.ranking_points) or 0
-          return rpA > rpB
-        end)
-        
-        -- 3. Reassign 'rank' from 1..N
-        for i, row in ipairs(rows) do
-          row.rank = i
-        end
-        -- 4. Write it back out
-        write_csv(filename, rows, headers)
-        
+      local new_job = create_job("updateOneCard", { team_number = team_number })
+      if new_job then
         client:send("HTTP/1.1 200 OK\r\n\r\nTeam data saved.\n")
       else
         client:send("HTTP/1.1 400 Bad Request\r\n\r\nFailed to fetch team data.\n")
+      end
+
+    elseif method == "GET" and path == "/api/teams.csv" then
+      -- Serve teams.csv directly
+      local file = io.open("teams.csv", "r")
+      if file then
+        local contents = file:read("*a")
+        file:close()
+        client:send("HTTP/1.1 200 OK\r\nContent-Type: text/csv\r\n\r\n" .. contents)
+      else
+        client:send("HTTP/1.1 404 Not Found\r\n\r\n")
       end
 
     ------------------------------------------------------------------------------
@@ -506,96 +354,378 @@ while true do
         client:send("HTTP/1.1 400 Bad Request\r\n\r\n")
       end
 
-    ------------------------------------------------------------------------------
-    -- NEW: GET /api/teams.csv => Serve CSV as text/csv
-    ------------------------------------------------------------------------------
-    elseif method == "GET" and path == "/api/teams.csv" then
-      local file = io.open("teams.csv", "r")
-      if file then
-        local content = file:read("*a")
-        file:close()
-        local response = "HTTP/1.1 200 OK\r\n"
-          .. "Content-Type: text/csv\r\n\r\n"
-          .. content
-        client:send(response)
-      else
-        client:send("HTTP/1.1 404 Not Found\r\n\r\n")
-      end
-
-    ------------------------------------------------------------------------------
-    -- NEW: POST /api/admin/updateAllCards => Loop through CSV & call python server
-    ------------------------------------------------------------------------------
-    elseif method == "POST" and path == "/api/admin/updateAllCards" then
-      local rows, headers = read_csv("teams.csv")
-      local results = {}
-
-      for _, row in ipairs(rows) do
-        local tnum = row.team_number
-        if tnum and tnum:match("^%d+$") then
-          local success, res = updateCardForTeam(tnum)
-          table.insert(results, {
-            team_number = tnum,
-            status = success and "OK" or ("ERROR: " .. tostring(res))
-          })
-        end
-      end
-
-      local json_response = json.encode(results)
-      local response = "HTTP/1.1 200 OK\r\n"
-        .. "Content-Type: application/json\r\n\r\n"
-        .. json_response
+    --------------------------------------------------------------------------
+    -- CREATE ASYNC JOBS
+    --------------------------------------------------------------------------
+    elseif method == "POST" and path == "/api/admin/asyncUpdateAllCards" then
+      -- We'll queue a job called "updateAllCards"
+      local job_id = create_job("updateAllCards", {})
+      local resp_body = json.encode({ status = "accepted", job_id = job_id })
+      local response = "HTTP/1.1 202 Accepted\r\nContent-Type: application/json\r\n\r\n" .. resp_body
       client:send(response)
 
-    ------------------------------------------------------------------------------
-    -- NEW: POST /api/admin/updateCard/<TEAM_NUMBER> => Single card update
-    ------------------------------------------------------------------------------
-    elseif method == "POST" and path:match("^/api/admin/updateCard/") then
-      local tnum = path:match("^/api/admin/updateCard/(%d+)$")
+    elseif method == "POST" and path:match("^/api/admin/asyncUpdateCard/") then
+      local tnum = path:match("^/api/admin/asyncUpdateCard/(%d+)$")
       if tnum then
-        local success, res = updateCardForTeam(tnum)
-        if success then
-          client:send("HTTP/1.1 200 OK\r\n\r\nTeam " .. tnum .. " card updated. \n")
-        else
-          client:send("HTTP/1.1 500 Internal Server Error\r\n\r\n" .. tostring(res) .. "\n")
-        end
+        -- We'll queue a job called "updateOneCard" with job_data = {team_number=tnum}
+        local job_id = create_job("updateOneCard", { team_number = tnum })
+        local resp_body = json.encode({ status = "accepted", job_id = job_id })
+        local response = "HTTP/1.1 202 Accepted\r\nContent-Type: application/json\r\n\r\n" .. resp_body
+        client:send(response)
       else
         client:send("HTTP/1.1 400 Bad Request\r\n\r\nMissing or invalid team number.\n")
       end
 
-    ------------------------------------------------------------------------------
-    -- NEW: POST /api/admin/uploadRobotImage => Skeleton for file upload
-    ------------------------------------------------------------------------------
+    --------------------------------------------------------------------------
+    -- Check Job Status
+    --------------------------------------------------------------------------
+    elseif method == "GET" and path:match("^/api/admin/jobStatus/") then
+      local j_id = path:match("^/api/admin/jobStatus/(%d+)$")
+      if j_id then
+        local rows, headers = read_jobs_csv(JOBS_CSV)
+        local found = false
+        for _, row in ipairs(rows) do
+          if row.job_id == j_id then
+            found = true
+            local status = row.status
+            local created_at = tonumber(row.created_at) or 0
+            local done_at    = tonumber(row.done_at)    or 0
+    
+            local run_time = 0
+            if status == "queued" or status == "running" then
+              -- still ongoing => run_time is now - created_at
+              run_time = os.time() - created_at
+            else
+              -- status is "OK" or "ERROR" => use done_at - created_at
+              if done_at > 0 then
+                run_time = done_at - created_at
+              else
+                -- fallback if for some reason done_at not set
+                run_time = os.time() - created_at
+              end
+            end
+    
+            if status == "queued" or status == "running" then
+              local resp = {
+                status = "running",
+                run_time = run_time,
+              }
+              local resp_json = json.encode(resp)
+              client:send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" .. resp_json)
+    
+            elseif status == "OK" then
+              -- row.job_data might have info
+              local detail = row.job_data or ""
+              local resp = {
+                status = "OK",
+                detail = detail,
+                run_time = run_time
+              }
+              local resp_json = json.encode(resp)
+              client:send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" .. resp_json)
+    
+            elseif status == "ERROR" then
+              local detail = row.job_data or ""
+              local resp = {
+                status = "ERROR",
+                detail = detail,
+                run_time = run_time
+              }
+              local resp_json = json.encode(resp)
+              client:send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" .. resp_json)
+    
+            else
+              -- unknown
+              local resp = {
+                status = status,
+                run_time = run_time
+              }
+              local resp_json = json.encode(resp)
+              client:send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" .. resp_json)
+            end
+            break
+          end
+        end
+        if not found then
+          client:send("HTTP/1.1 404 Not Found\r\n\r\nInvalid job id.\n")
+        end
+      else
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nMissing or invalid job id.\n")
+      end
+  
+    --------------------------------------------------------------------------
+    -- The Big Kahuna: Uploading an image file
+    --------------------------------------------------------------------------
     elseif method == "POST" and path == "/api/admin/uploadRobotImage" then
-      -- This is where you'd parse the incoming multipart/form-data.
-      -- SKELETON approach: Read raw request, parse boundaries, etc.
-      -- The below is only a demonstration of the high-level steps.
-
+      --------------------------------------------------------------------------
       -- 1. Read HTTP headers and content length
+      --------------------------------------------------------------------------
       local content_length = 0
+      local content_type = nil
       local request_headers = {}
       repeat
         local header_line = client:receive()
         if not header_line or header_line == "" then break end
         table.insert(request_headers, header_line)
+    
         local cl = header_line:match("^Content%-Length:%s*(%d+)")
-        if cl then content_length = tonumber(cl) or 0 end
+        if cl then
+          content_length = tonumber(cl) or 0
+        end
+    
+        local ct = header_line:match("^Content%-Type:%s*(.+)$")
+        if ct then
+          content_type = ct
+        end
       until false
-
-      -- 2. Read the POST body. (For real-world usage, you'd parse the boundary.)
+    
+      if not content_type or not content_type:find("multipart/form%-data;") then
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nMissing or invalid Content-Type (multipart/form-data required).\n")
+        goto done_upload
+      end
+    
+      -- Extract boundary from Content-Type: multipart/form-data; boundary=XXXX
+      local boundary = content_type:match("boundary=(.+)")
+      if not boundary then
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nBoundary not found in Content-Type.\n")
+        goto done_upload
+      end
+    
+      --------------------------------------------------------------------------
+      -- 2. Read the POST body fully
+      --------------------------------------------------------------------------
       local raw_body = client:receive(content_length)
+      if not raw_body then
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nFailed to read request body.\n")
+        goto done_upload
+      end
+    
+      -- We'll add "--" for boundary splitting logic
+      boundary = "--" .. boundary
+    
+      --------------------------------------------------------------------------
+      -- 3. Split the body by the boundary
+      --------------------------------------------------------------------------
+      local parts = {}
+      for part in raw_body:gmatch("(.-)" .. boundary) do
+        table.insert(parts, part)
+      end
+      -- The last split might contain extra trailing lines after final boundary
+    
+      -- We'll store form fields:
+      local teamNumber = nil
+      local fileContent = nil
+      local fileName = nil  -- e.g. "someimage.png"
+    
+      --------------------------------------------------------------------------
+      -- 4. Parse each part, look for "teamNumber" or "robotImage"
+      --------------------------------------------------------------------------
+      for _, partData in ipairs(parts) do
+        -- skip if empty or just newline
+        if #partData > 0 then
+          -- Try to separate headers from the data
+          local headerSection, bodySection = partData:match("^(.-\r?\n\r?\n)(.*)")
+          if headerSection and bodySection then
+            -- Check for name=, filename=, etc.
+            local dispLine = headerSection:match("Content%-Disposition:%s*form%-data;.-\r?\n")
+            if dispLine then
+              local fieldName = dispLine:match('name="([^"]+)"')
+              local fileParam = dispLine:match('filename="([^"]+)"')
+    
+              if fieldName == "teamNumber" and not fileParam then
+                -- This part is just the text field for teamNumber
+                local val = bodySection:gsub("\r?\n$", "")  -- remove trailing newline
+                teamNumber = val
+    
+              elseif fieldName == "robotImage" and fileParam then
+                -- This is the file upload
+                fileName = fileParam
+                -- bodySection might contain the entire binary data
+                -- remove trailing newlines if they exist
+                fileContent = bodySection:match("^(.*)\r?\n?$")
+              end
+            end
+          end
+        end
+      end
+    
+      --------------------------------------------------------------------------
+      -- 5. Validate + Save the image file
+      --------------------------------------------------------------------------
+      if not teamNumber or not fileContent or not fileName then
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nMissing teamNumber or file data.\n")
+        goto done_upload
+      end
+    
+      -- We only support .png or .jpeg
+      local ext = nil
+      if fileName:lower():match("%.png$") then
+        ext = "png"
+      elseif fileName:lower():match("%.jpe?g$") then
+        ext = "jpeg"
+      else
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nOnly .png or .jpeg files are supported.\n")
+        goto done_upload
+      end
+    
+      local outputPath = "./images/robotImages/" .. teamNumber .. "." .. ext
+      local outFile = io.open(outputPath, "wb")
+      if not outFile then
+        client:send("HTTP/1.1 500 Internal Server Error\r\n\r\nFailed to open output file.\n")
+        goto done_upload
+      end
+      outFile:write(fileContent)
+      outFile:close()
 
-      -- TODO: Properly parse form data. For example, get:
-      --   teamNumber
-      --   the file (binary)
-      --   filename
-      -- Save file into /robotImages/<teamNumber>.png or similar.
+      local job_id = create_job("updateOneCard", { team_number = teamNumber })
+    
+      client:send("HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully as " .. outputPath .. "\n")
+    
+      ::done_upload::
 
-      -- For now, just respond with a placeholder:
-      client:send("HTTP/1.1 200 OK\r\n\r\nUpload route not fully implemented.\n")
+    elseif method == "GET" and path == "/api/admin/jobs.csv" then
+      -- Serve jobs.csv directly
+      local file = io.open("jobs.csv", "r")
+      if file then
+        local contents = file:read("*a")
+        file:close()
+        client:send("HTTP/1.1 200 OK\r\nContent-Type: text/csv\r\n\r\n" .. contents)
+      else
+        client:send("HTTP/1.1 404 Not Found\r\n\r\n")
+      end
+    
+      local resp_json = json.encode(jobList)
+      local response = "HTTP/1.1 200 OK\r\n"
+        .. "Content-Type: application/json\r\n\r\n"
+        .. resp_json
+      client:send(response)
 
-    ------------------------------------------------------------------------------
-    -- Unrecognized path
-    ------------------------------------------------------------------------------
+    elseif method == "POST" and path == "/api/register" then
+      -- parse content-length, read JSON => { username, password }
+      -- ensure user not exist, store hashed pass
+      local content_length = 0
+      repeat
+        local line = client:receive()
+        if not line or line == "" then break end
+        local cl = line:match("^Content%-Length:%s*(%d+)")
+        if cl then content_length = tonumber(cl) end
+      until false
+      local body = client:receive(content_length)
+      local data = json.decode(body or "{}")
+      local uname = data.username
+      local pword = data.password
+      if not uname or not pword then
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nMissing fields.\n")
+      else
+        local rows, headers = read_users_csv(USERS_CSV)
+        for _, row in ipairs(rows) do
+          if row.username == uname then
+            client:send("HTTP/1.1 400 Bad Request\r\n\r\nUsername already exists.\n")
+            goto doneReg
+          end
+        end
+        local newRow = {
+          username = uname,
+          password_hash = simple_hash(pword),
+          session_token = "",
+          cards_owned = "", -- no cards
+          money = "20000"    -- give them some starting money
+        }
+        table.insert(rows, newRow)
+        write_users_csv(USERS_CSV, rows, headers)
+        client:send("HTTP/1.1 200 OK\r\n\r\nRegistered.\n")
+        ::doneReg::
+      end
+
+    elseif method == "POST" and path == "/api/login" then
+      local content_length = 0
+      repeat
+        local line = client:receive()
+        if not line or line == "" then break end
+        local cl = line:match("^Content%-Length:%s*(%d+)")
+        if cl then content_length = tonumber(cl) end
+      until false
+      local body = client:receive(content_length)
+      local data = json.decode(body or "{}")
+      local uname = data.username
+      local pword = data.password
+      if not uname or not pword then
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nMissing fields.\n")
+      else
+        local rows, headers = read_users_csv(USERS_CSV)
+        local found = false
+        for _, row in ipairs(rows) do
+          if row.username == uname then
+            found = true
+            if row.password_hash == simple_hash(pword) then
+              -- create session token
+              local token = tostring(math.random(1,999999999)) -- naive
+              row.session_token = token
+              write_users_csv(USERS_CSV, rows, headers)
+              local resp = json.encode({ session_token = token })
+              client:send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" .. resp)
+            else
+              client:send("HTTP/1.1 401 Unauthorized\r\n\r\nInvalid password.\n")
+            end
+            break
+          end
+        end
+        if not found then
+          client:send("HTTP/1.1 401 Unauthorized\r\n\r\nUser not found.\n")
+        end
+      end
+
+    elseif method == "GET" and path:match("^/api/logout") then
+      -- parse ?token= from path
+      local token = path:match("token=(%w+)")
+      if not token then
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nNo token param.\n")
+      else
+        local user, allRows, allHeaders = find_user_by_token(token)
+        if user then
+          user.session_token = ""
+          write_users_csv(USERS_CSV, allRows, allHeaders)
+          client:send("HTTP/1.1 200 OK\r\n\r\nLogged out.\n")
+        else
+          client:send("HTTP/1.1 400 Bad Request\r\n\r\nInvalid token.\n")
+        end
+      end
+
+    elseif method == "GET" and path:match("^/api/user/inventory") then
+      -- parse token
+      local token = path:match("token=(%w+)")
+      if not token then
+        client:send("HTTP/1.1 401 Unauthorized\r\n\r\nNo token.\n")
+      else
+        local user = find_user_by_token(token)
+        if not user then
+          client:send("HTTP/1.1 401 Unauthorized\r\n\r\nInvalid session.\n")
+        else
+          local cards_str = user.cards_owned or ""
+          if cards_str == "" then
+            client:send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n[]")
+          else
+            local arr = {}
+            for c in cards_str:gmatch("[^,]+") do table.insert(arr, c) end
+            local resp = json.encode(arr)
+            client:send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" .. resp)
+          end
+        end
+      end
+
+    elseif method == "GET" and path == "/api/market/top" then
+      -- hardcode some top selling cards
+      local topCards = {
+        {team_number="1771"},
+        {team_number="1261"},
+        {team_number="1683"},
+        {team_number="1771"},
+        {team_number="1261"},
+        {team_number="1683"}
+      }
+      local resp = json.encode(topCards)
+      client:send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" .. resp)
+    
     else
       client:send("HTTP/1.1 404 Not Found\r\n\r\n")
     end

@@ -77,6 +77,60 @@ end
 
 local JOBS_CSV = "jobs.csv"
 
+local function create_job(job_type, job_data_table, retry_count)
+  local team_number = "N/A"
+  if job_data_table and job_data_table.team_number then
+    team_number = tostring(job_data_table.team_number)
+  end
+
+  print("Creating new job:", job_type, "for team number:", team_number)
+
+  local rows, headers = read_jobs_csv(JOBS_CSV)
+
+  -- Ensure the needed columns exist
+  local needed_cols = {"job_id", "job_type", "status", "job_data", "created_at", "done_at", "retry_count"}
+  local header_map = {}
+  for _, h in ipairs(headers) do
+    header_map[h] = true
+  end
+  for _, col in ipairs(needed_cols) do
+    if not header_map[col] then
+      table.insert(headers, col)
+      header_map[col] = true
+    end
+  end
+
+  local job_id
+  local id_exists
+  repeat
+    job_id = tostring(math.random(100000, 999999))
+    id_exists = false
+    for _, row in ipairs(rows) do
+      if row.job_id == job_id then
+        id_exists = true
+        break
+      end
+    end
+  until not id_exists
+
+  local new_job = {
+    job_id = job_id,
+    job_type = job_type,
+    status = "queued",
+    job_data = json.encode(job_data_table or {}),
+    created_at = tostring(os.time()), -- Store as string
+    done_at = "",
+    retry_count = tostring(retry_count or 0)
+  }
+  table.insert(rows, new_job)
+  write_jobs_csv(JOBS_CSV, rows, headers)
+
+  print("Job created with ID:", job_id, "for team number:", team_number)
+
+  return job_id
+end
+
+
 ------------------------------------------------------------------------------
 -- 3. Additional Utility Functions (for teams.csv, TBA fetch, Python call, etc.)
 ------------------------------------------------------------------------------
@@ -249,29 +303,45 @@ local function fetch_team_data(team_number)
   return combined
 end
 
+-- Filter out blank fields from a table
+local function filter_blank_fields(data)
+  local filtered_data = {}
+  for key, value in pairs(data) do
+    if value ~= nil and value ~= "" then
+      filtered_data[key] = value
+    end
+  end
+  return filtered_data
+end
+
 local function save_to_csv(team_data)
   local filename = "teams.csv"
   local rows, headers = read_teams_csv(filename)
 
   local required_cols = {
-    "team_number","nickname","city","rookie_year",
-    "rank","wins","losses","ties","ranking_points",
-    "image_path","hitpoints","flavor_text"
+    "team_number", "nickname", "last_updated", "city", "rookie_year",
+    "rank", "wins", "losses", "ties", "ranking_points",
+    "image_path", "image_x", "image_y", "image_zoom",
+    "custom_label", "flavor_text", "abilities_list", "attacks_list",
+    "hitpoints", "illustrator", "base_set", "supertype", "type_",
+    "subtype", "variation", "rarity", "subname",
+    "weakness_type", "weakness_amt", "resistance_type", "resistance_amt",
+    "retreat_cost", "icon_text", "total_number_in_set", "custom_regulation_mark_image"
   }
 
-  -- Make sure these columns exist
+  -- Ensure required columns exist
   local header_map = {}
   for _, h in ipairs(headers) do
     header_map[h] = true
   end
-  for _, rc in ipairs(required_cols) do
-    if not header_map[rc] then
-      table.insert(headers, rc)
-      header_map[rc] = true
+  for _, col in ipairs(required_cols) do
+    if not header_map[col] then
+      table.insert(headers, col)
+      header_map[col] = true
     end
   end
 
-  -- Convert rows into a map for quick lookup
+  -- Update or add the row
   local row_map = {}
   for _, row in ipairs(rows) do
     row_map[row.team_number] = row
@@ -281,7 +351,6 @@ local function save_to_csv(team_data)
   local row = row_map[key]
   if not row then
     row = {}
-    row_map[key] = row
     table.insert(rows, row)
   end
 
@@ -291,6 +360,7 @@ local function save_to_csv(team_data)
 
   write_teams_csv(filename, rows, headers)
 end
+
 
 -- Build card data for the Python service
 local function build_card_data_from_csv(team_number)
@@ -312,17 +382,39 @@ local function build_card_data_from_csv(team_number)
         end
       end
 
-      return {
+      -- Build card data
+      local card_data = {
         team_number = row.team_number,
-        team_name   = row.nickname or ("Team ".. row.team_number),
-        image_path  = image_path,
-        flavor_text = row.flavor_text or "",
-        hitpoints   = row.hitpoints or "150",
-        custom_label= "No." .. row.team_number .. "FRC",
-        image_x     = row.image_x or 0,
-        image_y     = row.image_y or 0,
-        image_zoom  = row.image_zoom or 1.0
+        team_name = row.nickname or ("Team " .. row.team_number),
+        image_path = image_path,
+        image_x = tonumber(row.image_x),
+        image_y = tonumber(row.image_y),
+        image_zoom = tonumber(row.image_zoom),
+        custom_label = row.custom_label,
+        flavor_text = row.flavor_text,
+        abilities_list = row.abilities_list and json.decode(row.abilities_list),
+        attacks_list = row.attacks_list and json.decode(row.attacks_list),
+        hitpoints = row.hitpoints,
+        illustrator = row.illustrator,
+        base_set = row.base_set,
+        supertype = row.supertype,
+        type_ = row.type_,
+        subtype = row.subtype,
+        variation = row.variation,
+        rarity = row.rarity,
+        subname = row.subname,
+        weakness_type = row.weakness_type,
+        weakness_amt = row.weakness_amt,
+        resistance_type = row.resistance_type,
+        resistance_amt = row.resistance_amt,
+        retreat_cost = row.retreat_cost,
+        icon_text = row.icon_text,
+        total_number_in_set = row.total_number_in_set,
+        custom_regulation_mark_image = row.custom_regulation_mark_image
       }
+
+      -- Remove blank fields
+      return filter_blank_fields(card_data)
     end
   end
   return nil
@@ -346,6 +438,9 @@ local function create_card_via_python(card_data)
   stream:shutdown()
 
   if status ~= 200 then
+    print("Trying to create card again for team_number=", card_data.team_number)
+    local success, result = pcall(create_job, "updateOneCard", { team_number = card_data.team_number })
+    if not success then print("Error occurred: ", result) else print("Job probably created successfully: ", result) end
     return false, "Python server error: " .. tostring(status) .. " => " .. response_body
   end
 
@@ -353,27 +448,31 @@ local function create_card_via_python(card_data)
   if resp_json.status == "success" then
     return true, resp_json.card_path
   else
-    return false, resp_json.message or "Unknown card creation error"
+    print("Trying to create card again for team_number=", card_data.team_number)
+    local success, result = pcall(create_job, "updateOneCard", { team_number = card_data.team_number })
+    if not success then print("Error occurred: ", result) else print("Job probably created successfully: ", result) end
+    return false, resp_json.message or "Unknown card creation error \n Starting New Card Creation Job..."
   end
 end
 
 local function updateCardForTeam(team_number)
-  -- 1. Optionally fetch TBA, update team row in teams.csv
+  -- Fetch data and update `teams.csv`
   local tba_data = fetch_team_data(team_number)
   if tba_data then
-    save_to_csv(tba_data) -- update "teams.csv" with new rank/wins, etc.
+    tba_data.last_updated = os.time() -- Set last updated timestamp
+    save_to_csv(tba_data) -- Save updated team data
   end
 
-  -- 2. Build card data
+  -- Build card data and create the card
   local card_data = build_card_data_from_csv(team_number)
   if not card_data then
-    return false, "Team not found in CSV or missing image_path"
+    return false, "Team not found in CSV or missing required fields"
   end
 
-  -- 3. Call the Python card creator
   local success, result = create_card_via_python(card_data)
   return success, result
 end
+
 
 ------------------------------------------------------------------------------
 -- 5. Actual Job Execution
@@ -390,17 +489,19 @@ local function do_update_all_cards()
   -- Possibly read "teams.csv" and call updateCardForTeam for each row
   local all_rows, headers = read_teams_csv("teams.csv")
   local any_error = false
-  local message = "All cards updated"
-  for _, row in ipairs(all_rows) do
-    local team_number = row.team_number
-    local s, m = updateCardForTeam(team_number)
-    if not s then
-      any_error = true
-      message = "Error updating team " .. tostring(team_number) .. ": " .. m
-      break
-    end
-  end
-  return (not any_error), message
+  -- local message = "All cards updated"
+  local message = "Please dont use this lol. It breaks a lot."
+  -- for _, row in ipairs(all_rows) do
+  --   local team_number = row.team_number
+  --   local s, m = updateCardForTeam(team_number)
+  --   if not s then
+  --     any_error = true
+  --     message = "Error updating team " .. tostring(team_number) .. ": " .. m
+  --     break
+  --   end
+  -- end
+  -- return (not any_error), message
+  return false, message
 end
 
 local function save_new_team_data(team_number)
@@ -435,34 +536,41 @@ end
 ------------------------------------------------------------------------------
 
 while true do
+  -- Read the latest state of the file
   local rows, headers = read_jobs_csv(JOBS_CSV)
   local changed = false
   local now = os.time()
 
+  -- Track job IDs for quick lookup
+  local job_ids = {}
+  for _, row in ipairs(rows) do
+    job_ids[row.job_id] = row
+  end
+
+  -- Process queued jobs
   for i, row in ipairs(rows) do
     if row.status == "queued" then
-      -- set to running
+      -- Mark as running
       row.status = "running"
+      row.created_at = tostring(os.time())
       changed = true
 
-      -- parse job_data
-      local job_data = {}
-      if row.job_data and row.job_data ~= "" then
-        job_data = json.decode(row.job_data) or {}
-      end
-
+      -- Parse job data
+      local job_data = json.decode(row.job_data) or {}
       local success, message = false, "unknown"
-      if row.job_type == "updateOneCard" then
-        local tnum = job_data.team_number
-        success, message = do_update_one_card(tnum)
-      elseif row.job_type == "updateAllCards" then
-        success, message = do_update_all_cards()
 
+      if row.job_type == "updateOneCard" then
+        local team_number = job_data.team_number
+        success, message = do_update_one_card(team_number)
+      elseif row.job_type == "updateAllCards" then
+        success = false
+        message = "Please dont use this lol. It breaks a lot."
       else
         success = false
         message = "Unknown job type"
       end
 
+      -- Update status based on success
       if success then
         row.status = "OK"
         row.job_data = json.encode({ info = message })
@@ -471,23 +579,21 @@ while true do
         row.job_data = json.encode({ error = message })
       end
 
-      -- Set done_at
       row.done_at = tostring(os.time())
 
-      break -- process only one job this loop
+      break -- Process one job at a time
     end
   end
 
-  -- Next, remove old completed jobs (OK or ERROR) older than 5 minutes
+  -- Remove old completed jobs (OK or ERROR) older than 5 minutes
   local new_rows = {}
   for _, row in ipairs(rows) do
     if row.status == "OK" or row.status == "ERROR" then
       local done_at = tonumber(row.done_at) or 0
-      if done_at > 0 and (now - done_at) >= 300 then
-        -- skip adding this row => effectively delete
-        changed = true
+      if done_at == 0 or (now - done_at) < 300 then
+        table.insert(new_rows, row) -- Keep the row
       else
-        table.insert(new_rows, row)
+        changed = true -- Mark as changed since we are cleaning up
       end
     else
       table.insert(new_rows, row)
@@ -495,6 +601,21 @@ while true do
   end
 
   if changed then
+    -- Re-read the latest file and merge changes
+    local latest_rows, _ = read_jobs_csv(JOBS_CSV)
+    local latest_job_ids = {}
+    for _, row in ipairs(latest_rows) do
+      latest_job_ids[row.job_id] = row
+    end
+
+    -- Update `new_rows` to include any new jobs from the latest file
+    for _, latest_row in ipairs(latest_rows) do
+      if not job_ids[latest_row.job_id] then
+        table.insert(new_rows, latest_row) -- Add new jobs
+      end
+    end
+
+    -- Write back the updated state
     write_jobs_csv(JOBS_CSV, new_rows, headers)
   end
 

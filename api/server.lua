@@ -117,12 +117,18 @@ do
 end
 
 -- Utility: create a new job row
-local function create_job(job_type, job_data_table)
+local function create_job(job_type, job_data_table, retry_count)
+  local team_number = "N/A"
+  if job_data_table and job_data_table.team_number then
+    team_number = tostring(job_data_table.team_number)
+  end
+
+  print("Creating new job:", job_type, "for team number:", team_number)
+
   local rows, headers = read_jobs_csv(JOBS_CSV)
 
-  -- Ensure the new columns exist if they're not there yet
-  -- e.g. job_id,job_type,status,job_data,created_at,done_at
-  local needed_cols = {"job_id","job_type","status","job_data","created_at","done_at"}
+  -- Ensure the needed columns exist
+  local needed_cols = {"job_id", "job_type", "status", "job_data", "created_at", "done_at", "retry_count"}
   local header_map = {}
   for _, h in ipairs(headers) do
     header_map[h] = true
@@ -134,17 +140,33 @@ local function create_job(job_type, job_data_table)
     end
   end
 
-  local job_id = tostring(math.random(1,999999999))
+  local job_id
+  local id_exists
+  repeat
+    job_id = tostring(math.random(100000, 999999))
+    id_exists = false
+    for _, row in ipairs(rows) do
+      if row.job_id == job_id then
+        id_exists = true
+        break
+      end
+    end
+  until not id_exists
+
   local new_job = {
-    job_id    = job_id,
-    job_type  = job_type,
-    status    = "queued",
-    job_data  = json.encode(job_data_table or {}),
-    created_at= tostring(os.time()),  -- store as string
-    done_at   = ""
+    job_id = job_id,
+    job_type = job_type,
+    status = "queued",
+    job_data = json.encode(job_data_table or {}),
+    created_at = tostring(os.time()), -- Store as string
+    done_at = "",
+    retry_count = tostring(retry_count or 0)
   }
   table.insert(rows, new_job)
   write_jobs_csv(JOBS_CSV, rows, headers)
+
+  print("Job created with ID:", job_id, "for team number:", team_number)
+
   return job_id
 end
 

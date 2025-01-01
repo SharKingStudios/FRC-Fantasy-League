@@ -86,8 +86,9 @@ def create_card_api():
 
         return jsonify({"status": "success", "card_path": card_path})
     except Exception as e:
-        print(f"Error creating card: {e}")
-        return jsonify({"status": "failure", "message": "Card creation failed"}), 500
+        error_message = f"Card creation failed for Team {card_data['team_number']}"
+        print(error_message)
+        return jsonify({"status": "failure", "message": error_message}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8091)  # Running Flask on all IPs on port 8091

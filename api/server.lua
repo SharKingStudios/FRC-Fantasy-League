@@ -310,6 +310,95 @@ local function find_user_by_token(token)
   return nil, rows, headers
 end
 
+local function write_csv(filename, rows, headers)
+  local file = io.open(filename, "w")
+  if not file then return end
+
+  -- Write headers
+  file:write(table.concat(headers, ",") .. "\n")
+
+  -- Write rows
+  for _, row in ipairs(rows) do
+    local line = {}
+    for _, header in ipairs(headers) do
+      table.insert(line, row[header] or "")
+    end
+    file:write(table.concat(line, ",") .. "\n")
+  end
+
+  file:close()
+end
+
+-- Function to add unique headers to an existing list
+local function add_unique_headers(existing_headers, new_headers)
+  local header_set = {}
+  -- Add existing headers to a set for quick lookup
+  for _, header in ipairs(existing_headers) do
+    header_set[header] = true
+  end
+  -- Add new headers if they don't already exist
+  for _, header in ipairs(new_headers) do
+    if not header_set[header] then
+      table.insert(existing_headers, header)
+      header_set[header] = true
+    end
+  end
+  return existing_headers
+end
+
+local function updateTeamsCSV(req, res)
+  local body = req.body
+  local data = json.decode(body)
+
+  if not data or not data.updatedRows or not data.headers then
+    return res:status(400):json({ error = "Invalid request format" })
+  end
+
+  -- Read existing teams.csv
+  local teamsFile = "teams.csv"
+  local rows, headers = read_csv(teamsFile)
+
+  -- Ensure headers are updated without duplication
+  headers = add_unique_headers(headers, data.headers)
+
+  -- Update rows or add new ones
+  for _, updatedRow in ipairs(data.updatedRows) do
+    local found = false
+    for _, row in ipairs(rows) do
+      if row.team_number == updatedRow.team_number then
+        for key, value in pairs(updatedRow) do
+          row[key] = value
+        end
+        found = true
+        break
+      end
+    end
+
+    if not found then
+      table.insert(rows, updatedRow)
+    end
+  end
+
+  -- Write back to teams.csv
+  write_csv(teamsFile, rows, headers)
+  return res:status(200):json({ message = "Teams CSV updated successfully." })
+end
+
+
+local function parse_headers(client)
+  local headers = {}
+  while true do
+    local line = client:receive()
+    if not line or line == "" then break end -- End of headers
+    local key, value = line:match("^(.-):%s*(.+)$")
+    if key and value then
+      headers[key:lower()] = value -- Store headers as lowercase keys for consistency
+    end
+  end
+  return headers
+end
+
+
 -------------------------------------------------------------------------------
 -- Minimal HTTP server for incoming requests
 -------------------------------------------------------------------------------
@@ -621,6 +710,39 @@ while true do
         .. "Content-Type: application/json\r\n\r\n"
         .. resp_json
       client:send(response)
+
+    elseif method == "POST" and path == "/api/admin/updateTeamsCSV" then
+      local headers = parse_headers(client)
+      local content_length = tonumber(headers["content-length"]) -- Parse Content-Length header
+    
+      if content_length then
+        local body = client:receive(content_length)
+        local success, result = pcall(function()
+          return updateTeamsCSV({ body = body }, {
+            status = function(_, code)
+              return {
+                code = code,
+                json = function(_, obj)
+                  local json_resp = json.encode(obj)
+                  return "HTTP/1.1 " .. code .. " OK\r\nContent-Type: application/json\r\n\r\n" .. json_resp
+                end
+              }
+            end
+          })
+        end)
+        if success then
+          client:send(result)
+        else
+          print("Error in updateTeamsCSV:", result)
+          client:send("HTTP/1.1 500 Internal Server Error\r\n\r\nFailed to update teams.csv\n")
+        end
+      else
+        print("Missing or invalid Content-Length header")
+        client:send("HTTP/1.1 400 Bad Request\r\n\r\nInvalid request.\n")
+      end
+    
+    
+    
 
     elseif method == "POST" and path == "/api/register" then
       -- parse content-length, read JSON => { username, password }

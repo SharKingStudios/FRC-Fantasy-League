@@ -556,7 +556,7 @@ if __name__ == "__main__":
     custom_label = f"No. {team_number} FRC"
     flavor_text = "This is some test text right here. It's a flavor text."
     hitpoints = "150"
-    rarity_icon = "Hyper Rare"
+    rarity_icon = "None"
     resistance_type = "Lightning"
     resistance_amt = "30"
     card_number = f"{team_number}"

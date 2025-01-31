@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width">
-  <title>Inventory - Fantasy FRC</title>
+  <title>Crossroads - PCH Fantasy FRC</title>
   <style>
     body {
+      margin: 0;
+      padding: 0;
       background: #1e1e1e;
       background-size: 100px 100px;
       background-color: #1e1e1e;
@@ -18,9 +20,15 @@
       font-family: Roboto, sans-serif;
       margin: 2rem;
       padding-top: 60px;
+      transition: background-color 0.3s ease;
+      overflow-x: hidden; /* Prevent horizontal scroll */
     }
     body.no-scroll {
       overflow: hidden; /* Disable scrolling */
+    }
+    h1, h2{
+      text-align: center;
+      color: #fff;
     }
     .controls {
       display: flex;
@@ -29,18 +37,6 @@
     }
     .controls > * {
       margin: 0.5rem;
-    }
-    #market, #inventory {
-      width: 90%;
-      max-width: 800px;
-      margin: 1rem auto;
-      border: 1px solid #555;
-      border-radius: 8px;
-      background-color: #2e2e2e;
-      padding: 1rem;
-    }
-    #market h2, #inventory h2 {
-      margin-top: 0;
     }
     button {
       padding: 0.6rem 1rem;
@@ -55,9 +51,10 @@
     button:hover {
       background-color: #666;
     }
+    
 
     /* Grid container for teams */
-    .teamList {
+    #teamList {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
@@ -185,7 +182,7 @@
 
     #centeredbox {
       width: 100%;
-      max-width: 800px;
+      max-width: 1400px;
       margin: 1rem auto;
       border: 1px solid #555;
       border-radius: 8px;
@@ -195,46 +192,6 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-    }
-
-    .card-list {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-    
-    .card-list div {
-      /* margin: 0.5rem;
-      padding: 0.5rem;
-      border: 1px solid #555;
-      background: #1e1e1e;
-      background-color: #1e1e1e; */
-      /* background-image:
-        linear-gradient(rgba(255,255,255,.25) 2px, transparent 2px),
-        linear-gradient(90deg, rgba(255,255,255,.25) 2px, transparent 2px),
-        linear-gradient(rgba(255,255,255,.14) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.14) 1px, transparent 1px);
-      background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
-      background-position: -2px -2px, -2px -2px, -1px -1px, -1px -1px; */
-      background-color: #2e2e2e;
-      border: 1px solid #555;
-      border-radius: 8px;
-      width: 220px;
-      padding: 1rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      position: relative;
-      cursor: pointer;
-      overflow: hidden; /* Prevent children from extending outside bounds */
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-      perspective: 1000px; /* For 3D tilt of child */
-    }
-    .msg {
-      color: #f0f0f0;
-      text-align: center;
     }
 
     /* Title Bar */
@@ -274,9 +231,54 @@
       transform: translateX(-100px);
       display: flex;
       gap: 15px;
+      align-items: center;
     }
     .title-bar .nav-links a:hover {
       text-decoration: underline;
+    }
+
+    @media (max-width: 600px) {
+      .title-bar .nav-links {
+        display: none;
+      }
+      .title-bar .title {
+        transform: translateX(-50%);
+      }
+    }
+
+    .about-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1rem;
+    }
+    .about-text {
+      align-items: center;
+      justify-content: center;
+      width: 70%;
+      padding: .2rem;
+    }
+    .about-image {
+      width: 25%;
+      padding: .2rem;
+    }
+
+    .floaty {
+      animation: float 6s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% {
+        transform: translate(5%, -3%) rotate(-2deg);
+      }
+      25% {
+        transform: translate(3%, 0%) rotate(2deg);
+      }
+      50% {
+        transform: translate(5%, 3%) rotate(-1deg);
+      }
+      75% {
+        transform: translate(4%, 0%) rotate(-1deg);
+      }
     }
   </style>
 </head>
@@ -284,26 +286,45 @@
   <div class="title-bar" id="titleBar">
   </div>
 
-  <!-- <div class="controls">
-    <h1>Welcome to PCH Fantasy FRC - Home</h1>
-    <button onclick="logout()"><strong>Log Out</strong></button>
-  </div> -->
+  <div id="centeredbox">
+    <div class="controls">
+      <h1>Welcome to My Absolutely Massive Ship:<br>PCH Fantasy FRC</h1>
+    </div>
+    <section id="about" class="about-text controls">
+    <div class="about-text">
+      <h2>What is PCH Fantasy FRC?</h2>
+    
+      <p>PCH Fantasy FRC is a fantasy-style game for the FIRST Robotics Competition (FRC), where you can draft teams and earn points based on their real-world performance in Peachtree District (PCH) events.<br>Hey, I might even be able to print some of the cards for real!</p>
+      <p><strong>Build your strategy, trade teams, and compete to have the highest score by the end of the season!</strong></p>
+      <p>Use the buttons above to log in or sign up to get started! No email is required—just jump in and play.</p>
+      <p>Want to add your own FRC team from outside PCH? Contact me on the Hackclub slack!<br>@Logan Peterson</p>
 
-  <div id="market">
-    <h2>Top Selling Cards</h2>
-    <div class="teamList" id="marketCards"></div>
+      <p><strong>Note: Rankings and images are currently determined by 2024 event statistics and will switch over before the first PCH event.</strong></p>
+
+      <div class="controls">
+        <button onclick="window.location.href='/signup';">Lets Try An Account!</button>
+      </div>
+    </div>
+
+    <div class="about-image floaty">
+      <img src="https://sharkingstudios.hackclub.app/images/Orpheus%20FFRC.png" alt="Orpheus Fantasy FRC Logo" style="width: 100%;">
+    </div>
+  </section>
+
   </div>
 
-  <div id="inventory">
-    <h2>Your Inventory (Max 6 Cards)</h2>
-    <div class="teamList" id="inventoryCards"></div>
+  <div class="controls">
+    <h2>There Are 97 Active Teams in PCH District.</h2>
+    <button id="refreshBtn">Refresh Team List</button>
+    <button onclick="window.location.href='/market';">Check Out The Market!</button>
+
   </div>
+
+  <div id="teamList"></div>
 
   <div id="overlay" onclick="closeOverlay(event)">
     <img id="overlayImage" class="overlayImage" src="" alt="Zoomed Robot Card">
   </div>
-
-  <div class="msg" id="message"></div>
 
   <script>
     let sessionToken = "";
@@ -313,53 +334,32 @@
         await fetch('/api/logout?token=' + encodeURIComponent(sessionToken));
         // Clear local storage
         localStorage.removeItem('session_token');
+        localStorage.removeItem('username');
         window.location.href = "login";
       } catch (err) {
         document.getElementById('message').textContent = "Logout error: " + err;
       }
     }
 
-    async function loadMarket() {
+    // Fetch data
+    async function fetchTeams() {
+      const teamList = document.getElementById('teamList');
+      teamList.innerHTML = '<p>Loading teams...</p>';
       try {
-        // Fetch market cards
-        const marketResponse = await fetch('/api/market/top');
-        if (!marketResponse.ok) {
-          throw new Error(`Market fetch failed: ${marketResponse.statusText}`);
+        const response = await fetch('/api/teams');
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
         }
-        const marketCards = await marketResponse.json(); // e.g., [{team_number: "1771", ...}]
-
-        // Fetch all teams data
-        const teamsResponse = await fetch('/api/teams');
-        if (!teamsResponse.ok) {
-          throw new Error(`Teams fetch failed: ${teamsResponse.statusText}`);
-        }
-        const teams = await teamsResponse.json(); // e.g., [{team_number: "1771", nickname: "North Gwinnett Robotics", ...}]
-
-        // Enrich market cards with team data
-        const enrichedMarketCards = marketCards.map(card => {
-          const teamData = teams.find(team => team.team_number === card.team_number);
-          return { ...card, ...teamData }; // Merge team data into the card
-        });
-
-        displayMarket(enrichedMarketCards);
-      } catch (err) {
-        document.getElementById('message').textContent = "Market error: " + err;
+        const data = await response.json();
+        displayTeams(data);
+      } catch (error) {
+        console.error(error);
+        teamList.innerHTML = '<p>Failed to load team data. Please try again later.</p>';
       }
     }
 
-
-    function renderMarket(cards) {
-      const container = document.getElementById('marketCards');
-      container.innerHTML = "";
-      cards.forEach(card => {
-        const div = document.createElement('div');
-        div.textContent = card.id + " - " + card.name;
-        container.appendChild(div);
-      });
-    }
-
-    function displayMarket(teams) {
-      const teamList = document.getElementById('marketCards');
+    function displayTeams(teams) {
+      const teamList = document.getElementById('teamList');
       teamList.innerHTML = '';
 
       if (!Array.isArray(teams) || teams.length === 0) {
@@ -382,7 +382,7 @@
         // Touch events for mobile
         imgContainer.addEventListener('touchmove', onCardTouchMove);
         imgContainer.addEventListener('touchend', onCardTouchEnd);
-        
+
         const imgElement = document.createElement('img');
         imgElement.className = 'robot-card';
         imgElement.loading = 'lazy';
@@ -394,111 +394,9 @@
           console.log(`Cache miss for Team ${team.team_number}: ${error}`);
           imgElement.src = `/api/robotCards/size220/${team.team_number}.png`;
         }
-        imgElement.onerror = function() {
-          this.onerror = null;
-          this.src = '/api/robotCards/default.png';
-        };
-
-        const statsDiv = document.createElement('div');
-        statsDiv.className = 'stats';
-        statsDiv.innerHTML = `
-          <strong>W/L/T:</strong> ${team.wins}/${team.losses}/${team.ties}<br>
-          <strong>RP:</strong> ${team.ranking_points}
-        `;
-
-        tile.addEventListener('click', () => {
-          openOverlay(team);
-        });
-
-        imgContainer.appendChild(imgElement);
-        tile.appendChild(title);
-        tile.appendChild(imgContainer);
-        tile.appendChild(statsDiv);
-
-        teamList.appendChild(tile);
-      });
-    }
-
-    async function loadInventory() {
-      try {
-        // Fetch user's inventory
-        const inventoryResponse = await fetch('/api/user/inventory?token=' + encodeURIComponent(sessionToken));
-        if (!inventoryResponse.ok) {
-          throw new Error(`Inventory fetch failed: ${inventoryResponse.statusText}`);
-        }
-        const inventoryCardIds = await inventoryResponse.json(); // e.g., ["{\"team_number\":\"1771\"}"]
-
-        // Parse inventory JSON strings into objects
-        const parsedInventoryCardIds = inventoryCardIds.map(card =>
-          typeof card === 'string' ? JSON.parse(card) : card
-        ); // Result: [{ team_number: "1771" }]
-
-        // Fetch all teams data
-        const teamsResponse = await fetch('/api/teams');
-        if (!teamsResponse.ok) {
-          throw new Error(`Teams fetch failed: ${teamsResponse.statusText}`);
-        }
-        const teams = await teamsResponse.json(); // e.g., [{team_number: "1771", nickname: "North Gwinnett Robotics", ...}]
-
-        // Enrich inventory cards with team data
-        const enrichedInventory = parsedInventoryCardIds.map(card => {
-          const teamData = teams.find(team => team.team_number === card.team_number); // Match by team_number
-          return { ...card, ...teamData }; // Merge team data into the inventory card
-        });
-
-        displayInventory(enrichedInventory);
-      } catch (err) {
-        document.getElementById('message').textContent = "Inventory error: " + err.message;
-      }
-    }
-
-    function renderInventory(cardIds) {
-      const container = document.getElementById('inventoryCards');
-      container.innerHTML = "";
-      cardIds.forEach(id => {
-        const div = document.createElement('div');
-        div.textContent = "Card ID: " + id;
-        container.appendChild(div);
-      });
-    }
-
-    function displayInventory(teams) {
-      const teamList = document.getElementById('inventoryCards');
-      teamList.innerHTML = '';
-
-      teams = teams.map(team => (typeof team === 'string' ? JSON.parse(team) : team));
-
-      if (!Array.isArray(teams) || teams.length === 0) {
-        teamList.innerHTML = '<p>No team data available.</p>';
-        return;
-      }
-
-      teams.forEach(async (team) => {
-        const tile = document.createElement('div');
-        tile.className = 'team';
-
-        const title = document.createElement('h2');
-        title.innerHTML = `Team ${team.team_number}<br>${team.nickname}`;
-
-        // Image container with perspective
-        const imgContainer = document.createElement('div');
-        imgContainer.className = 'image-container';
-        imgContainer.addEventListener('mousemove', onCardMouseMove);
-        imgContainer.addEventListener('mouseleave', onCardMouseLeave);
-        // Touch events for mobile
-        imgContainer.addEventListener('touchmove', onCardTouchMove);
-        imgContainer.addEventListener('touchend', onCardTouchEnd);
-
-        const imgElement = document.createElement('img');
-        imgElement.className = 'robot-card';
-        imgElement.alt = `Team ${team.team_number} Robot Card`;
-        try {
-          const cachedUrl = await getCachedImage(team.team_number);
-          imgElement.src = cachedUrl;
-        } catch (error) {
-          console.log(`Cache miss for Team ${team.team_number}: ${error}`);
-          imgElement.src = `/api/robotCards/size220/${team.team_number}.png`;
-        }
+        imgElement.width = 220;
+        imgElement.height = 307;
+        imgElement.setAttribute('data-team-number', team.team_number);
         imgElement.onerror = function() {
           this.onerror = null;
           this.src = '/api/robotCards/default.png';
@@ -622,6 +520,8 @@
       overlayImage.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1.0)';
     }
 
+
+
     function openOverlay(team) {
       const overlay = document.getElementById('overlay');
       const overlayImage = document.getElementById('overlayImage');
@@ -660,8 +560,6 @@
       overlay.classList.remove('show');
     }
 
-
-
     /// CACHE IMAGES CODE
     // Function to parse CSV into objects
     function parseCsv(csvText) {
@@ -697,35 +595,49 @@
         for (const team of serverTeams) {
           const teamNumber = team.team_number;
 
-          // Trim and parse the last_updated field
+          // Parse timestamps
           const rawLastUpdated = String(team.last_updated).trim();
           const serverTimestamp = parseInt(rawLastUpdated, 10);
-
           const localTimestamp = parseInt(localCache[teamNumber] || 0, 10);
 
-          // Debugging logs
-          // console.log(`Team ${teamNumber}: Raw last_updated = "${team.last_updated}" (Type: ${typeof team.last_updated})`);
-          // console.log(`Parsed Server Timestamp = ${serverTimestamp}, Local Timestamp = ${localTimestamp}`);
-
-          // Skip if serverTimestamp is invalid
           if (isNaN(serverTimestamp)) {
-            console.error(`Invalid last_updated value for Team ${teamNumber}: "${team.last_updated}". Uh oh! Try refreshing the page 😅`);
+            console.error(`Invalid last_updated value for Team ${teamNumber}: "${team.last_updated}".`);
             continue;
           }
 
-          // Update only if the server's timestamp is newer
+          // Update if server timestamp is newer
           if (serverTimestamp > localTimestamp) {
-            console.log(`New Image found for ${teamNumber}! (Refresh to view)`);
+            console.log(`Updating image for Team ${teamNumber}`);
             await fetchAndCacheImage(`/api/robotCards/size220/${teamNumber}.png`, teamNumber);
             updatedCache[teamNumber] = serverTimestamp;
-          } else {
-            // console.log(`No update needed for Team ${teamNumber}`);
+
+            // Notify the UI to update the image
+            updateImageInUI(teamNumber);
           }
         }
-        // Save updated cache to localStorage
+
+        // Save updated cache
         localStorage.setItem('localImages', JSON.stringify(updatedCache));
       } catch (error) {
         console.error('Error updating team images:', error);
+      }
+    }
+
+    async function updateImageInUI(teamNumber) {
+      try {
+        const imgElements = document.querySelectorAll(`img.robot-card[data-team-number="${teamNumber}"]`);
+        if (imgElements.length === 0) return;
+
+        // Get the updated cached image URL
+        const cachedUrl = await getCachedImage(teamNumber);
+
+        // Update all relevant images on the page
+        imgElements.forEach((img) => {
+          img.src = cachedUrl;
+          console.log(`Updated image for Team ${teamNumber}`);
+        });
+      } catch (error) {
+        console.error(`Failed to update image in UI for Team ${teamNumber}:`, error);
       }
     }
 
@@ -775,40 +687,9 @@
       });
     }
 
-    // Initialize page and images
-    async function initializePage() {
-      try {
-        sessionToken = localStorage.getItem('session_token');
-        if (!sessionToken) {
-          // not logged in
-          window.location.href = "login";
-          return;
-        }
-        await updateTeamImages();
-        loadMarket(); // Assuming this function loads market data
-        loadInventory(); // Assuming this function loads inventory data
-      } catch (error) {
-        console.error('Error initializing page:', error);
-        document.getElementById('message').textContent = 'Error: ' + error.message;
-      }
-    }
-
-    // On page load
-    window.addEventListener('DOMContentLoaded', initializePage);
-
-
-    // window.addEventListener('DOMContentLoaded', () => {
-    //   sessionToken = localStorage.getItem('session_token');
-    //   if (!sessionToken) {
-    //     // not logged in
-    //     window.location.href = "login";
-    //     return;
-    //   }
-    //   // load top market
-    //   loadMarket();
-    //   // load user inventory
-    //   loadInventory();
-    // });
+    updateTeamImages();
+    window.addEventListener('DOMContentLoaded', fetchTeams);
+    document.getElementById('refreshBtn').addEventListener('click', fetchTeams);
 
     function renderTitleBar() {
       const titleBar = document.getElementById('titleBar');
@@ -817,23 +698,24 @@
       if (isLoggedIn) {
         // HTML for logged-in users
         titleBar.innerHTML = `
-          <a href="/" class="title">Fantasy FRC (PCH) - Inventory</a>
+          <a href="/" class="title">Fantasy FRC (PCH)</a>
           <div class="nav-links">
             <button onclick="window.location.href='/';"><strong>Home</strong></button>
             <button onclick="window.location.href='/market';"><strong>Market</strong></button>
-            <button onclick="window.location.href='/home';"><strong>View Inventory</strong></button>
+            <button onclick="window.location.href='/inventory';"><strong>View Inventory</strong></button>
             <button onclick="window.location.href='/leaderboards';"><strong>Leaderboards</strong></button>
             <button onclick="logout()"><strong>Log Out</strong></button>
+            <p>Welcome <strong>${localStorage.getItem('username')}</strong></p>
           </div>
         `;
       } else {
         // HTML for logged-out users
         titleBar.innerHTML = `
-          <a href="/" class="title">Fantasy FRC (PCH) - Inventory</a>
+          <a href="/" class="title">Fantasy FRC (PCH)</a>
           <div class="nav-links">
             <button onclick="window.location.href='/';"><strong>Home</strong></button>
             <button onclick="window.location.href='/market';"><strong>Market</strong></button>
-            <button onclick="window.location.href='/home';"><strong>View Inventory</strong></button>
+            <button onclick="window.location.href='/inventory';"><strong>View Inventory</strong></button>
             <button onclick="window.location.href='/leaderboards';"><strong>Leaderboards</strong></button>
             <button onclick="window.location.href='/login';"><strong>Log In</strong></button>
             <button onclick="window.location.href='/signup';"><strong>Sign Up</strong></button>

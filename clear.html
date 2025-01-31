@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width">
-  <title>Inventory - Fantasy FRC</title>
+  <title>Market - Fantasy FRC</title>
   <style>
     body {
       background: #1e1e1e;
@@ -32,7 +32,7 @@
     }
     #market, #inventory {
       width: 90%;
-      max-width: 800px;
+      max-width: 1400px;
       margin: 1rem auto;
       border: 1px solid #555;
       border-radius: 8px;
@@ -284,26 +284,15 @@
   <div class="title-bar" id="titleBar">
   </div>
 
-  <!-- <div class="controls">
-    <h1>Welcome to PCH Fantasy FRC - Home</h1>
+  <div class="controls">
     <button onclick="logout()"><strong>Log Out</strong></button>
-  </div> -->
-
-  <div id="market">
-    <h2>Top Selling Cards</h2>
-    <div class="teamList" id="marketCards"></div>
-  </div>
-
-  <div id="inventory">
-    <h2>Your Inventory (Max 6 Cards)</h2>
-    <div class="teamList" id="inventoryCards"></div>
-  </div>
+</div>
 
   <div id="overlay" onclick="closeOverlay(event)">
     <img id="overlayImage" class="overlayImage" src="" alt="Zoomed Robot Card">
   </div>
 
-  <div class="msg" id="message"></div>
+  <!-- <div class="msg" id="message"></div> -->
 
   <script>
     let sessionToken = "";
@@ -386,111 +375,6 @@
         const imgElement = document.createElement('img');
         imgElement.className = 'robot-card';
         imgElement.loading = 'lazy';
-        imgElement.alt = `Team ${team.team_number} Robot Card`;
-        try {
-          const cachedUrl = await getCachedImage(team.team_number);
-          imgElement.src = cachedUrl;
-        } catch (error) {
-          console.log(`Cache miss for Team ${team.team_number}: ${error}`);
-          imgElement.src = `/api/robotCards/size220/${team.team_number}.png`;
-        }
-        imgElement.onerror = function() {
-          this.onerror = null;
-          this.src = '/api/robotCards/default.png';
-        };
-
-        const statsDiv = document.createElement('div');
-        statsDiv.className = 'stats';
-        statsDiv.innerHTML = `
-          <strong>W/L/T:</strong> ${team.wins}/${team.losses}/${team.ties}<br>
-          <strong>RP:</strong> ${team.ranking_points}
-        `;
-
-        tile.addEventListener('click', () => {
-          openOverlay(team);
-        });
-
-        imgContainer.appendChild(imgElement);
-        tile.appendChild(title);
-        tile.appendChild(imgContainer);
-        tile.appendChild(statsDiv);
-
-        teamList.appendChild(tile);
-      });
-    }
-
-    async function loadInventory() {
-      try {
-        // Fetch user's inventory
-        const inventoryResponse = await fetch('/api/user/inventory?token=' + encodeURIComponent(sessionToken));
-        if (!inventoryResponse.ok) {
-          throw new Error(`Inventory fetch failed: ${inventoryResponse.statusText}`);
-        }
-        const inventoryCardIds = await inventoryResponse.json(); // e.g., ["{\"team_number\":\"1771\"}"]
-
-        // Parse inventory JSON strings into objects
-        const parsedInventoryCardIds = inventoryCardIds.map(card =>
-          typeof card === 'string' ? JSON.parse(card) : card
-        ); // Result: [{ team_number: "1771" }]
-
-        // Fetch all teams data
-        const teamsResponse = await fetch('/api/teams');
-        if (!teamsResponse.ok) {
-          throw new Error(`Teams fetch failed: ${teamsResponse.statusText}`);
-        }
-        const teams = await teamsResponse.json(); // e.g., [{team_number: "1771", nickname: "North Gwinnett Robotics", ...}]
-
-        // Enrich inventory cards with team data
-        const enrichedInventory = parsedInventoryCardIds.map(card => {
-          const teamData = teams.find(team => team.team_number === card.team_number); // Match by team_number
-          return { ...card, ...teamData }; // Merge team data into the inventory card
-        });
-
-        displayInventory(enrichedInventory);
-      } catch (err) {
-        document.getElementById('message').textContent = "Inventory error: " + err.message;
-      }
-    }
-
-    function renderInventory(cardIds) {
-      const container = document.getElementById('inventoryCards');
-      container.innerHTML = "";
-      cardIds.forEach(id => {
-        const div = document.createElement('div');
-        div.textContent = "Card ID: " + id;
-        container.appendChild(div);
-      });
-    }
-
-    function displayInventory(teams) {
-      const teamList = document.getElementById('inventoryCards');
-      teamList.innerHTML = '';
-
-      teams = teams.map(team => (typeof team === 'string' ? JSON.parse(team) : team));
-
-      if (!Array.isArray(teams) || teams.length === 0) {
-        teamList.innerHTML = '<p>No team data available.</p>';
-        return;
-      }
-
-      teams.forEach(async (team) => {
-        const tile = document.createElement('div');
-        tile.className = 'team';
-
-        const title = document.createElement('h2');
-        title.innerHTML = `Team ${team.team_number}<br>${team.nickname}`;
-
-        // Image container with perspective
-        const imgContainer = document.createElement('div');
-        imgContainer.className = 'image-container';
-        imgContainer.addEventListener('mousemove', onCardMouseMove);
-        imgContainer.addEventListener('mouseleave', onCardMouseLeave);
-        // Touch events for mobile
-        imgContainer.addEventListener('touchmove', onCardTouchMove);
-        imgContainer.addEventListener('touchend', onCardTouchEnd);
-
-        const imgElement = document.createElement('img');
-        imgElement.className = 'robot-card';
         imgElement.alt = `Team ${team.team_number} Robot Card`;
         try {
           const cachedUrl = await getCachedImage(team.team_number);
@@ -778,15 +662,15 @@
     // Initialize page and images
     async function initializePage() {
       try {
-        sessionToken = localStorage.getItem('session_token');
-        if (!sessionToken) {
-          // not logged in
-          window.location.href = "login";
-          return;
-        }
+        // sessionToken = localStorage.getItem('session_token');
+        // if (!sessionToken) {
+        //   // not logged in
+        //   window.location.href = "login";
+        //   return;
+        // }
         await updateTeamImages();
         loadMarket(); // Assuming this function loads market data
-        loadInventory(); // Assuming this function loads inventory data
+        // loadInventory(); // Assuming this function loads inventory data
       } catch (error) {
         console.error('Error initializing page:', error);
         document.getElementById('message').textContent = 'Error: ' + error.message;
@@ -817,11 +701,11 @@
       if (isLoggedIn) {
         // HTML for logged-in users
         titleBar.innerHTML = `
-          <a href="/" class="title">Fantasy FRC (PCH) - Inventory</a>
+          <a href="/" class="title">Fantasy FRC (PCH) - Thy Market</a>
           <div class="nav-links">
             <button onclick="window.location.href='/';"><strong>Home</strong></button>
             <button onclick="window.location.href='/market';"><strong>Market</strong></button>
-            <button onclick="window.location.href='/home';"><strong>View Inventory</strong></button>
+            <button onclick="window.location.href='/inventory';"><strong>View Inventory</strong></button>
             <button onclick="window.location.href='/leaderboards';"><strong>Leaderboards</strong></button>
             <button onclick="logout()"><strong>Log Out</strong></button>
           </div>
@@ -829,11 +713,11 @@
       } else {
         // HTML for logged-out users
         titleBar.innerHTML = `
-          <a href="/" class="title">Fantasy FRC (PCH) - Inventory</a>
+          <a href="/" class="title">Fantasy FRC (PCH) - Thy Market</a>
           <div class="nav-links">
             <button onclick="window.location.href='/';"><strong>Home</strong></button>
             <button onclick="window.location.href='/market';"><strong>Market</strong></button>
-            <button onclick="window.location.href='/home';"><strong>View Inventory</strong></button>
+            <button onclick="window.location.href='/inventory';"><strong>View Inventory</strong></button>
             <button onclick="window.location.href='/leaderboards';"><strong>Leaderboards</strong></button>
             <button onclick="window.location.href='/login';"><strong>Log In</strong></button>
             <button onclick="window.location.href='/signup';"><strong>Sign Up</strong></button>

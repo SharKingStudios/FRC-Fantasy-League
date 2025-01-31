@@ -7,6 +7,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 import os
 import time
+import argparse
+import json
 
 def safe_click(driver, element):
     """
@@ -354,6 +356,9 @@ def create_card(
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--ignore-certificate-errors")
+    chrome_options.add_argument("--window-size=1000,1000")
+    # chrome_options.add_argument("--disable-gpu")
+    # chrome_options.add_argument("--headless=new")
     # chrome_options.add_argument("--headless")  # Run headless for server use
 
     # Set the download directory
@@ -469,7 +474,7 @@ def create_card(
 
         # Select Resistance Type dropdown
         remove_obstructing_iframe(driver)
-        select_custom_dropdown_by_label(driver, "Resistance Type", resistance_type)
+        select_custom_dropdown_by_label(driver, "Resistance Type", "Lightning")
 
         # Fill out the form
         fill_field("name-input", name)
@@ -542,25 +547,7 @@ def create_card(
 
 # Example usage:
 if __name__ == "__main__":
-    output_dir = os.path.abspath("./robotCards")
-    os.makedirs(output_dir, exist_ok=True)
 
-    # Example data
-    #Specific Things to change
-    team_number = "1771"
-    image_path = os.path.abspath("./images/robotImages/1771.jpeg")
-    image_x = "-15"
-    image_y = "-100"
-    image_zoom = "0.95"
-    name = "North Gwinnett Robotics"
-    custom_label = f"No. {team_number} FRC"
-    flavor_text = "This is some test text right here. It's a flavor text."
-    hitpoints = "150"
-    rarity_icon = "None"
-    resistance_type = "Lightning"
-    resistance_amt = "30"
-    card_number = f"{team_number}"
-    
     # Example list of attacks
     attacks_list = [
         {
@@ -588,13 +575,58 @@ if __name__ == "__main__":
             "description": "Once during your turn, if a note is collected from your active robot, another note is collected.",
         },
     ]
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--team_number", required=True)
+    parser.add_argument("--image_path",  required=True)
+    parser.add_argument("--output_path", required=True)
+    parser.add_argument("--image_x", default="-15")
+    parser.add_argument("--image_y", default="-100")
+    parser.add_argument("--image_zoom", default="0.95")
+    parser.add_argument("--name", default="North Gwinnett Robotics")
+    parser.add_argument("--custom_label", default="No. 1771 FRC")
+    parser.add_argument("--flavor_text", default="")
+    parser.add_argument("--hitpoints", default="150")
+    parser.add_argument("--rarity_icon", default="None")
+    parser.add_argument("--resistance_type", default="Lightning")
+    parser.add_argument("--resistance_amt", default="30")
+    parser.add_argument("--card_number", default="1771")
+    parser.add_argument("--attacks_list", default="[]")
+    parser.add_argument("--abilities_list", default="[]")
+    parser.add_argument("--type", default="Metal")
+
+    args = parser.parse_args()
+
+    output_dir = os.path.abspath("./temp_robot_cards")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Example data
+    #Specific Things to change
+    # team_number = "1771"
+    team_number = args.team_number
+    # image_path = os.path.abspath("./images/robotImages/1771.jpeg")
+    image_path = os.path.abspath(args.image_path)
+    image_x = args.image_x
+    image_y = args.image_y
+    image_zoom = args.image_zoom
+    name = args.name
+    type_ = args.type
+    custom_label = f"No. {team_number} FRC"
+    flavor_text = args.flavor_text
+    hitpoints = args.hitpoints
+    rarity_icon = args.rarity_icon
+    resistance_type = args.resistance_type
+    resistance_amt = args.resistance_amt
+    card_number = f"{team_number}"
+    
+    attacks_list = json.loads(args.attacks_list)
+    abilities_list = json.loads(args.abilities_list)
     
     # Default Stuff
     illustrator = "Logan Peterson"
     custom_regulation_mark_image = os.path.abspath("./images/FIRSTlogo.png")
     base_set = "Sword & Shield"
     supertype = "Pokémon"
-    type_ = "Metal"
     subtype = "Basic"
     variation = "None"
     rarity = "None"
@@ -603,14 +635,14 @@ if __name__ == "__main__":
     retreat_cost = "3"
     subname = ""
     icon = "Custom Rectangle"
-    icon_text = "FRC"
-    total_number_in_set = "100"
+    icon_text = "PCH"
+    total_number_in_set = "10714"
 
 
     create_card(
         base_set, supertype, type_, subtype, variation, rarity,
         name, subname, hitpoints, custom_label, weakness_type, weakness_amt,
         resistance_type, resistance_amt, retreat_cost, illustrator, icon_text,
-        flavor_text, image_path, -15, -100, 0.95, attacks_list, abilities_list,
+        flavor_text, image_path, image_x, image_y, image_zoom, attacks_list, abilities_list,
         output_dir, team_number, total_number_in_set, custom_regulation_mark_image
     )

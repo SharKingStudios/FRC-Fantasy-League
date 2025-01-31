@@ -65,7 +65,7 @@
     /* Console log area */
     #logArea {
       width: 90%;
-      max-width: 800px;
+      max-width: 1000px;
       margin: 1rem auto;
       border: 1px solid #555;
       border-radius: 8px;
@@ -82,8 +82,8 @@
 
     /* Teams CSV table */
     #teamsTable {
-      width: 90%;
-      max-width: 800px;
+      width: 95%;
+      /* max-width: 2000px; */
       margin: 1rem auto;
       border: 1px solid #555;
       border-radius: 8px;
@@ -118,7 +118,7 @@
     /* Job list styling */
     #jobList {
       width: 90%;
-      max-width: 800px;
+      max-width: 1000px;
       margin: 1rem auto;
       border: 1px solid #555;
       border-radius: 8px;
@@ -203,12 +203,17 @@
 
   <!-- Teams CSV display -->
   <div id="teamsTable">
-    <h2>Teams CSV</h2>
+    <div class="controls">
+      <h2>Teams CSV</h2>
+      <button id="updateTeamsBtn">Refresh Teams</button>
+      <button id="saveChangesBtn">Save Changes</button>
+    </div>
     <table>
       <thead id="teamsTableHead"></thead>
       <tbody id="teamsTableBody"></tbody>
     </table>
   </div>
+  
 
   <script>
     /***********************************************************************
@@ -391,56 +396,138 @@
      * 2) parseJobsCSV
      *    For each row: if status=queued or running, pollJobStatus(...)
      ***********************************************************************/
+     function parseCsv(csvText) {
+      const rows = [];
+      const regex = /(?:"([^"]*(?:""[^"]*)*)"|([^",]*))(?:,|$)/g;
+
+      csvText.trim().split('\n').forEach((line, lineIndex) => {
+        const row = [];
+        let match;
+
+        // Reset regex state for each line
+        regex.lastIndex = 0;
+
+        while ((match = regex.exec(line)) !== null) {
+          // Safeguard against infinite matches
+          if (match.index === regex.lastIndex) {
+            regex.lastIndex++;
+          }
+
+          // Match quoted or unquoted values
+          let value = match[1] || match[2] || '';
+          value = value.replace(/""/g, '"'); // Unescape double quotes
+          row.push(value.trim());
+        }
+
+        rows.push(row);
+      });
+
+      return rows;
+    }
+
+
     function parseJobsCSV(csvText) {
-      // convert to lines
-      const lines = csvText.split('\n').map(l => l.trim()).filter(l => !!l);
-      if (lines.length < 2) {
-        logToConsole("jobs.csv empty or no data.");
+      const rows = parseCsv(csvText);
+
+      if (rows.length < 2) {
+        console.log("No data in jobs.csv or invalid format.");
         return;
       }
-      // first line is headers
-      const headers = lines[0].split(',');
-      // find indices for job_id, status, job_type
+
+      const headers = rows[0];
       const jobIdIdx = headers.indexOf('job_id');
       const statusIdx = headers.indexOf('status');
-      const typeIdx   = headers.indexOf('job_type');
+      const typeIdx = headers.indexOf('job_type');
 
-      for (let i = 1; i < lines.length; i++) {
-        const rowParts = lines[i].split(',');
-        const job_id    = rowParts[jobIdIdx];
-        const job_status= rowParts[statusIdx];
-        const job_type  = rowParts[typeIdx] || "unknown";
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const jobId = row[jobIdIdx];
+        const jobStatus = row[statusIdx];
+        const jobType = row[typeIdx] || 'unknown';
 
-        // If job is queued or running, let's poll it
-        if (job_status === 'queued' || job_status === 'running' || job_status === 'ERROR' || job_status === 'OK') {
-          // If we are not already tracking this job in activeJobs, start polling
-          if (!activeJobs[job_id]) {
-            logToConsole(`Found job_id=${job_id} with status=${job_status}. Polling now.`);
-            pollJobStatus(job_id, job_type);
+        if (jobStatus === 'queued' || jobStatus === 'running' || jobStatus === 'ERROR' || jobStatus === 'OK') {
+          if (!activeJobs[jobId]) {
+            logToConsole(`Found job_id=${jobId} with status=${jobStatus}. Polling now.`);
+            pollJobStatus(jobId, jobType);
           }
         }
       }
     }
 
+
     /***********************************************************************
      * updateAllCardsAsync
      ***********************************************************************/
+     function parseTeamsCSVForNumbers(csvText) {
+      const lines = csvText.split('\n').map(line => line.trim()).filter(line => !!line);
+      if (lines.length < 1) {
+        throw new Error("teams.csv is empty or invalid.");
+      }
+      const headers = lines[0].split(',');
+      const teamNumberIdx = headers.indexOf('team_number'); // Adjust this if your CSV uses a different header name
+
+      if (teamNumberIdx === -1) {
+        throw new Error("teams.csv does not contain 'team_number' column.");
+      }
+
+      const teamNumbers = lines.slice(1).map(line => {
+        const parts = line.split(',');
+        return parts[teamNumberIdx].trim();
+      });
+
+      return teamNumbers;
+    }
+
+    // Utility to create a delay
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+     
     async function updateAllCardsAsync() {
-      logToConsole("Sending async request to update all cards...");
+      logToConsole("Sending async requests to update all cards...");
+
       try {
-        const response = await fetch('/api/admin/asyncUpdateAllCards', {
-          method: 'POST'
-        });
-        if (response.status === 202) {
-          const data = await response.json();
-          const jobId = data.job_id;
-          logToConsole("UpdateAllCards => job accepted, jobId=" + jobId);
-          pollJobStatus(jobId, "updateAllCards");
-        } else {
-          throw new Error(`Expected 202, got ${response.status}`);
+        const response = await fetch('/api/teams.csv');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch teams.csv: ${response.statusText}`);
         }
+        const csvText = await response.text();
+        const teamNumbers = parseTeamsCSVForNumbers(csvText);
+
+        if (teamNumbers.length === 0) {
+          logToConsole("No teams found to update.");
+          return;
+        }
+
+        logToConsole(`Found ${teamNumbers.length} teams. Starting updates...`);
+
+        for (const teamNumber of teamNumbers) {
+          // Remove any leading/trailing quotes from the teamNumber
+          const cleanedTeamNumber = teamNumber.replace(/^"(.*)"$/, '$1');
+
+          try {
+            const resp = await fetch(`/api/admin/asyncUpdateCard/${cleanedTeamNumber}`, {
+              method: 'POST'
+            });
+            if (resp.status === 202) {
+              const data = await resp.json();
+              const jobId = data.job_id;
+              logToConsole(`Async update for Team ${cleanedTeamNumber} => job accepted, jobId=${jobId}`);
+              pollJobStatus(jobId, `updateOneCard-${cleanedTeamNumber}`);
+            } else {
+              throw new Error(`Expected 202, got ${resp.status} for team ${cleanedTeamNumber}`);
+            }
+          } catch (error) {
+            logToConsole(`Error (async) updating card for Team ${cleanedTeamNumber}: ${error}`);
+          }
+
+          // Introduce a delay between each request
+          await delay(500); // Adjust delay (e.g., 500ms) as needed
+        }
+
+        logToConsole("All async update requests sent.");
       } catch (error) {
-        logToConsole("Error (async) updating all cards: " + error);
+        logToConsole("Error updating all cards: " + error);
       }
     }
 
@@ -509,6 +596,27 @@
     /***********************************************************************
      * fetchTeamsCSV & displayTeamsCSV
      ***********************************************************************/
+    function unquoteCell(cell) {
+      let c = cell.trim();
+      // If it starts and ends with double-quote
+      if (c.startsWith('"') && c.endsWith('"') && c.length >= 2) {
+        c = c.slice(1, -1); // remove the first and last "
+      }
+      // Convert doubled quotes "" to single quotes "
+      c = c.replace(/""/g, '"');
+      return c;
+    }
+
+    /************************************************************
+     * CSV Quote Helper (if you want to re-quote in JS)
+     ************************************************************/
+    function quoteCell(str) {
+      // Double up existing quotes
+      const doubled = str.replace(/"/g, '""');
+      // Wrap in quotes
+      return `"${doubled}"`;
+    }
+
     async function fetchTeamsCSV() {
       try {
         const response = await fetch('/api/teams.csv');
@@ -523,14 +631,16 @@
     }
 
     function displayTeamsCSV(csvText) {
-      const lines = csvText.split("\n").map(line => line.trim()).filter(line => !!line);
-      if (lines.length < 1) {
+      const rows = parseCsv(csvText); // Use the new parser
+      
+      if (rows.length < 1) {
         return logToConsole("teams.csv is empty or invalid.");
       }
-      const headerLine = lines[0];
-      const headers = headerLine.split(",");
-      document.getElementById('teamsTableHead').innerHTML = "";
-      document.getElementById('teamsTableBody').innerHTML = "";
+
+      const headers = rows[0];
+
+      document.getElementById('teamsTableHead').innerHTML = '';
+      document.getElementById('teamsTableBody').innerHTML = '';
 
       // Render header
       const theadRow = document.createElement('tr');
@@ -542,18 +652,20 @@
       document.getElementById('teamsTableHead').appendChild(theadRow);
 
       // Render rows
-      for (let i = 1; i < lines.length; i++) {
-        const row = document.createElement('tr');
-        const cells = lines[i].split(",");
+      for (let i = 1; i < rows.length; i++) {
+        const rowEl = document.createElement('tr');
+        const cells = rows[i];
 
-        for (let j = 0; j < headers.length; j++) {
+        cells.forEach(cell => {
           const td = document.createElement('td');
-          td.textContent = cells[j] || "";
-          row.appendChild(td);
-        }
-        document.getElementById('teamsTableBody').appendChild(row);
+          td.textContent = cell; // Already unescaped and trimmed
+          rowEl.appendChild(td);
+        });
+
+        document.getElementById('teamsTableBody').appendChild(rowEl);
       }
     }
+
 
     // Send POST request to add a new team (POST /api/teams/<team_number>)
     async function addTeam() {
@@ -574,11 +686,159 @@
           throw new Error(`Failed to add team ${teamNumber}.`);
         }
 
-        alert(`Team ${teamNumber} added!`);
+        // alert(`Team ${teamNumber} added!`);
+        logToConsole(`Team ${teamNumber} added!`);
         teamNumberInput.value = ''; // Clear the input
       } catch (error) {
         console.error(error);
         alert('An error occurred while adding the team. Check the console for details.');
+      }
+    }
+
+
+
+
+
+    // Save any changes to teams.csv
+    function serializeCsv(headers, rows) {
+      // Helper function to quote a field if necessary
+      function quoteField(value) {
+        if (typeof value !== 'string') {
+          value = String(value);
+        }
+        // Check if the field needs quoting
+        if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+          // Escape double quotes by doubling them
+          value = value.replace(/"/g, '""');
+          return `"${value}"`;
+        }
+        return value;
+      }
+
+      // Serialize headers
+      const serializedHeaders = headers.map(quoteField).join(',');
+
+      // Serialize rows
+      const serializedRows = rows.map(row => {
+        return headers.map(header => {
+          const value = row[header] || '';
+          return quoteField(value);
+        }).join(',');
+      });
+
+      // Combine headers and rows
+      return [serializedHeaders, ...serializedRows].join('\n');
+    }
+
+
+    let editedRows = {}; // Track edited rows for batch saving
+
+    // Make table cells editable
+    function makeTableEditable() {
+      const tableBody = document.getElementById('teamsTableBody');
+      const rows = tableBody.querySelectorAll('tr');
+      rows.forEach((row, rowIndex) => {
+        const cells = row.querySelectorAll('td');
+        cells.forEach((cell, cellIndex) => {
+          cell.contentEditable = true; // Make cell editable
+          cell.addEventListener('input', () => {
+            if (!editedRows[rowIndex]) editedRows[rowIndex] = {};
+            editedRows[rowIndex][cellIndex] = cell.textContent.trim();
+            cell.style.backgroundColor = '#444'; // Highlight edited cell
+          });
+        });
+      });
+    }
+
+    // Send updated rows to the server
+    async function saveChanges() {
+      if (Object.keys(editedRows).length === 0) {
+        logToConsole('No changes to save.');
+        return;
+      }
+
+      try {
+        // fetch the latest CSV text to get current headers
+        const response = await fetch('/api/teams.csv');
+        if (!response.ok) {
+          throw new Error('Failed to fetch teams.csv for headers.');
+        }
+
+        const csvText = await response.text();
+        const lines = csvText.split('\n').map(line => line.trim()).filter(line => !!line);
+        if (lines.length < 1) {
+          throw new Error('teams.csv is empty or invalid.');
+        }
+
+        // parse headers, unquote them
+        const rawHeaders = lines[0].split(',');
+        const headers = rawHeaders.map(unquoteCell);
+
+        // Build updatedRows from editedRows
+        const updatedRows = Object.keys(editedRows).map(rowIndex => {
+          const originalLine = lines[parseInt(rowIndex)+1] || '';
+          const originalCells = originalLine.split(',');
+          const rowObj = {};
+          headers.forEach((h, colIndex) => {
+            // If user edited that cell
+            if (editedRows[rowIndex][colIndex] !== undefined) {
+              rowObj[h] = editedRows[rowIndex][colIndex];
+            } else {
+              // otherwise, keep old cell (unquote it)
+              rowObj[h] = unquoteCell(originalCells[colIndex] || '');
+            }
+          });
+          return rowObj;
+        });
+
+        // Filter out rows that have no "team_number"
+        const filteredUpdatedRows = updatedRows.filter(r => r.team_number && r.team_number.trim() !== '');
+
+        const saveResp = await fetch('/api/admin/updateTeamsCSV', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            updatedRows: filteredUpdatedRows,
+            headers: headers  // server expects array of strings
+          })
+        });
+
+        if (!saveResp.ok) {
+          throw new Error('Failed to save changes');
+        }
+        logToConsole('Changes saved successfully.');
+        editedRows = {};
+        clearEditedHighlights();
+        fetchTeamsCSV(); // re-load to see new data
+      } catch (err) {
+        logToConsole('Error saving changes: ' + err);
+      }
+    }
+
+
+    function clearEditedHighlights() {
+      const rows = document.getElementById('teamsTableBody').querySelectorAll('tr');
+      rows.forEach((row) => {
+        const cells = row.querySelectorAll('td');
+        cells.forEach((cell) => {
+          cell.style.backgroundColor = ''; // Clear highlight
+        });
+      });
+    }
+
+
+    // Fetch and display teams.csv
+    async function fetchTeamsCSV() {
+      try {
+        const response = await fetch('/api/teams.csv');
+        if (!response.ok) {
+          throw new Error('Failed to fetch teams.csv');
+        }
+        const csvText = await response.text();
+        displayTeamsCSV(csvText);
+        makeTableEditable(); // Enable editing
+      } catch (error) {
+        logToConsole('Error fetching teams.csv: ' + error);
       }
     }
 
@@ -591,10 +851,14 @@
       document.getElementById('updateOneAsyncBtn').addEventListener('click', updateOneCardAsync);
       document.getElementById('uploadImageBtn').addEventListener('click', uploadRobotImage);
       document.getElementById('addTeamBtn').addEventListener('click', addTeam);
+      document.getElementById('saveChangesBtn').addEventListener('click', saveChanges);
+      document.getElementById('updateTeamsBtn').addEventListener('click', fetchTeamsCSV);
 
       // Load teams.csv
       fetchTeamsCSV();
-      setInterval(fetchTeamsCSV, 10000);
+      if (editedRows == {}) {
+        setInterval(fetchTeamsCSV, 10000);
+      }
       setInterval(fetchJobsCSV, 10000);
 
       // Also fetch the jobs.csv so we can poll any queued/running

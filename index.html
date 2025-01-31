@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width">
   <title>PCH Fantasy FRC</title>
   <style>
     body {
@@ -20,6 +21,9 @@
       margin: 2rem;
       transition: background-color 0.3s ease;
       overflow-x: hidden; /* Prevent horizontal scroll */
+    }
+    body.no-scroll {
+      overflow: hidden; /* Disable scrolling */
     }
     h1, h2{
       text-align: center;
@@ -46,6 +50,7 @@
     button:hover {
       background-color: #666;
     }
+    
 
     /* Grid container for teams */
     #teamList {
@@ -135,7 +140,7 @@
       border-radius: 8px;
       padding: 1rem;
       max-width: 90%; 
-      max-height: 90%;
+      max-height: 600px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -156,7 +161,7 @@
     /* Overlay image */
     #overlayImage {
       display: block;
-      width: auto; /* Ensure width adjusts proportionally */
+      width: 90%; /* Ensure width adjusts proportionally */
       max-height: 90%; /* Restrict to 90% of screen height for wiggle room */
       object-fit: contain; /* Maintain aspect ratio */
       transition: transform 0.1s ease-out;
@@ -241,7 +246,7 @@
         return;
       }
 
-      teams.forEach(team => {
+      teams.forEach(async (team) => {
         const tile = document.createElement('div');
         tile.className = 'team';
 
@@ -253,11 +258,24 @@
         imgContainer.className = 'image-container';
         imgContainer.addEventListener('mousemove', onCardMouseMove);
         imgContainer.addEventListener('mouseleave', onCardMouseLeave);
+        // Touch events for mobile
+        imgContainer.addEventListener('touchmove', onCardTouchMove);
+        imgContainer.addEventListener('touchend', onCardTouchEnd);
 
         const imgElement = document.createElement('img');
         imgElement.className = 'robot-card';
+        imgElement.loading = 'lazy';
         imgElement.alt = `Team ${team.team_number} Robot Card`;
-        imgElement.src = `/api/robotCards/${team.team_number}.png`;
+        try {
+          const cachedUrl = await getCachedImage(team.team_number);
+          imgElement.src = cachedUrl;
+        } catch (error) {
+          console.log(`Cache miss for Team ${team.team_number}: ${error}`);
+          imgElement.src = `/api/robotCards/size220/${team.team_number}.png`;
+        }
+        imgElement.width = 220;
+        imgElement.height = 307;
+        imgElement.setAttribute('data-team-number', team.team_number);
         imgElement.onerror = function() {
           this.onerror = null;
           this.src = '/api/robotCards/default.png';
@@ -306,44 +324,249 @@
       cardImage.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1.0)';
     }
 
+    function onCardTouchMove(e) {
+      e.preventDefault(); // Prevent default scrolling behavior
+
+      const touch = e.touches[0]; // Get the first touch point
+      const container = e.currentTarget;
+      const rect = container.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const moveX = (x - centerX) / centerX;
+      const moveY = (y - centerY) / centerY;
+      const rotateX = moveY * 10;
+      const rotateY = moveX * 10;
+
+      const cardImage = container.querySelector('img');
+      cardImage.style.transform = `rotateX(${-rotateX}deg) rotateY(${rotateY}deg) scale(1.1)`;
+    }
+
+
+    function onCardTouchEnd(e) {
+      const container = e.currentTarget;
+      const cardImage = container.querySelector('img');
+      cardImage.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1.0)';
+    }
+
+    function onOverlayMouseMove(e) {
+      const overlayImage = e.currentTarget;
+
+      // Ensure the event is targeting the image itself
+      if (e.target !== overlayImage) {
+        return;
+      }
+
+      const rect = overlayImage.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const moveX = (x - centerX) / centerX;
+      const moveY = (y - centerY) / centerY;
+      const rotateX = moveY * 25;
+      const rotateY = moveX * 25;
+
+      overlayImage.style.transform = `rotateX(${-rotateX}deg) rotateY(${rotateY}deg) scale(1.05)`;
+    }
+
+    function onOverlayMouseLeave(e) {
+      const overlayImage = e.currentTarget;
+      overlayImage.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1.0)';
+    }
+
+
+    function onOverlayTouchMove(e) {
+      e.preventDefault(); // Prevent default scrolling behavior
+      const touch = e.touches[0]; // Get the first touch point
+      const overlayImage = e.currentTarget;
+      const rect = overlayImage.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const moveX = (x - centerX) / centerX;
+      const moveY = (y - centerY) / centerY;
+      const rotateX = moveY * 25;
+      const rotateY = moveX * 25;
+
+      overlayImage.style.transform = `rotateX(${-rotateX}deg) rotateY(${rotateY}deg) scale(1.05)`;
+    }
+
+    function onOverlayTouchEnd(e) {
+      const overlayImage = e.currentTarget;
+      overlayImage.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1.0)';
+    }
+
+
+
     function openOverlay(team) {
       const overlay = document.getElementById('overlay');
       const overlayImage = document.getElementById('overlayImage');
       overlayImage.src = `/api/robotCards/${team.team_number}.png`;
+      // overlayImage.loading = 'lazy';
 
-      overlayImage.addEventListener('mousemove', e => {
-        const rect = overlayImage.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
+      // Add mousemove and mouseleave listeners for desktop
+      overlayImage.addEventListener('mousemove', onOverlayMouseMove);
+      overlayImage.addEventListener('mouseleave', onOverlayMouseLeave);
 
-        const damping = 0.5; // Controls sensitivity
-        const moveX = (x - centerX) / centerX * damping;
-        const moveY = (y - centerY) / centerY * damping;
+      // Add touchmove and touchend listeners for mobile
+      overlayImage.addEventListener('touchmove', onOverlayTouchMove, { passive: false });
+      overlayImage.addEventListener('touchend', onOverlayTouchEnd);
 
-        const rotateX = Math.min(Math.max(moveY * 30, -15), 15); // Clamp between -15 and 15 degrees
-        const rotateY = Math.min(Math.max(moveX * 30, -15), 15); // Clamp between -15 and 15 degrees
-
-        overlayImage.style.transform = `rotateX(${-rotateX}deg) rotateY(${rotateY}deg) scale(1.05)`;
-      });
-
-      overlayImage.addEventListener('mouseleave', () => {
-        overlayImage.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1.0)';
-      });
+      // Disable background scrolling
+      document.body.classList.add('no-scroll');
 
       overlay.classList.add('show');
     }
 
     function closeOverlay(event) {
       const overlay = document.getElementById('overlay');
-      overlay.classList.remove('show');
+      const overlayImage = document.getElementById('overlayImage');
 
-      const overlayImgContainer = document.getElementById('overlayImgContainer');
-      overlayImgContainer.removeEventListener('mousemove', onCardMouseMove);
-      overlayImgContainer.removeEventListener('mouseleave', onCardMouseLeave);
+      // Remove event listeners for mouse
+      overlayImage.removeEventListener('mousemove', onOverlayMouseMove);
+      overlayImage.removeEventListener('mouseleave', onOverlayMouseLeave);
+
+      // Remove event listeners for touch
+      overlayImage.removeEventListener('touchmove', onOverlayTouchMove);
+      overlayImage.removeEventListener('touchend', onOverlayTouchEnd);
+
+      // Re-enable background scrolling
+      document.body.classList.remove('no-scroll');
+
+      overlay.classList.remove('show');
     }
 
+    /// CACHE IMAGES CODE
+    // Function to parse CSV into objects
+    function parseCsv(csvText) {
+      const lines = csvText.trim().split('\n');
+      const headers = lines.shift().split(',');
+
+      return lines.map((line, index) => {
+        const values = line.split(',');
+        const row = headers.reduce((acc, header, idx) => {
+          acc[header] = values[idx]?.replace(/^"|"$/g, ''); // Remove surrounding quotes
+          return acc;
+        }, {});
+
+        // Debugging log
+        // console.log(`Parsed row ${index}:`, row);
+
+        return row;
+      });
+    }
+
+    // Fetch and compare team data from server and local storage
+    async function updateTeamImages() {
+      try {
+        const response = await fetch('/api/teams.csv');
+        if (!response.ok) throw new Error('Failed to fetch teams.csv');
+
+        const csvText = await response.text();
+        const serverTeams = parseCsv(csvText);
+
+        const localCache = JSON.parse(localStorage.getItem('localImages')) || {};
+        const updatedCache = { ...localCache };
+
+        for (const team of serverTeams) {
+          const teamNumber = team.team_number;
+
+          // Parse timestamps
+          const rawLastUpdated = String(team.last_updated).trim();
+          const serverTimestamp = parseInt(rawLastUpdated, 10);
+          const localTimestamp = parseInt(localCache[teamNumber] || 0, 10);
+
+          if (isNaN(serverTimestamp)) {
+            console.error(`Invalid last_updated value for Team ${teamNumber}: "${team.last_updated}".`);
+            continue;
+          }
+
+          // Update if server timestamp is newer
+          if (serverTimestamp > localTimestamp) {
+            console.log(`Updating image for Team ${teamNumber}`);
+            await fetchAndCacheImage(`/api/robotCards/size220/${teamNumber}.png`, teamNumber);
+            updatedCache[teamNumber] = serverTimestamp;
+
+            // Notify the UI to update the image
+            updateImageInUI(teamNumber);
+          }
+        }
+
+        // Save updated cache
+        localStorage.setItem('localImages', JSON.stringify(updatedCache));
+      } catch (error) {
+        console.error('Error updating team images:', error);
+      }
+    }
+
+    async function updateImageInUI(teamNumber) {
+      try {
+        const imgElements = document.querySelectorAll(`img.robot-card[data-team-number="${teamNumber}"]`);
+        if (imgElements.length === 0) return;
+
+        // Get the updated cached image URL
+        const cachedUrl = await getCachedImage(teamNumber);
+
+        // Update all relevant images on the page
+        imgElements.forEach((img) => {
+          img.src = cachedUrl;
+          console.log(`Updated image for Team ${teamNumber}`);
+        });
+      } catch (error) {
+        console.error(`Failed to update image in UI for Team ${teamNumber}:`, error);
+      }
+    }
+
+
+    // Fetch and cache an image
+    async function fetchAndCacheImage(url, teamNumber) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch image for Team ${teamNumber}`);
+      const blob = await response.blob();
+
+      const db = await openIndexedDB();
+      const transaction = db.transaction('images', 'readwrite');
+      const store = transaction.objectStore('images');
+      store.put({ key: teamNumber, blob });
+
+      console.log(`Cached image for Team ${teamNumber}`);
+    }
+
+    // Retrieve an image from IndexedDB
+    async function getCachedImage(teamNumber) {
+      const db = await openIndexedDB();
+      const transaction = db.transaction('images', 'readonly');
+      const store = transaction.objectStore('images');
+      return new Promise((resolve, reject) => {
+        const request = store.get(teamNumber);
+        request.onsuccess = () => {
+          if (request.result) {
+            resolve(URL.createObjectURL(request.result.blob));
+          } else {
+            reject('Image not found in cache');
+          }
+        };
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    // Open IndexedDB
+    async function openIndexedDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('cardImagesDB', 1);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          db.createObjectStore('images', { keyPath: 'key' });
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    updateTeamImages();
     window.addEventListener('DOMContentLoaded', fetchTeams);
     document.getElementById('refreshBtn').addEventListener('click', fetchTeams);
   </script>

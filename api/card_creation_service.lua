@@ -19,58 +19,175 @@ package.cpath = package.cpath
 local json         = require("dkjson")
 local http_request = require("http.request")
 local lfs          = require("lfs")
+local csv          = require("lua-csv.csv")
 
 ------------------------------------------------------------------------------
 -- 2. CSV Utility for Jobs
 ------------------------------------------------------------------------------
-local function read_jobs_csv(filename)
-  local file = io.open(filename, "r")
-  if not file then
-    return {}, {}
-  end
+-- local function parse_csv_line(line)
+--   local fields = {}
+--   local pattern = '("([^"]*)"|[^,]+)'
+--   for part, quoted in string.gmatch(line, pattern) do
+--     if quoted then
+--       -- part is quoted => quoted is what's inside
+--       -- Convert doubled quotes ("") to single quote (")
+--       local unescaped = quoted:gsub('""', '"')
+--       table.insert(fields, unescaped)
+--     else
+--       -- unquoted field
+--       table.insert(fields, part)
+--     end
+--   end
+--   return fields
+-- end
 
-  local lines = {}
-  for line in file:lines() do
-    table.insert(lines, line)
+local function to_csv_line(fields)
+  local pieces = {}
+  for _, val in ipairs(fields) do
+    val = tostring(val or "")
+    -- double up any " inside val
+    val = val:gsub('"', '""')
+    -- wrap in quotes
+    val = '"' .. val .. '"'
+    table.insert(pieces, val)
   end
-  file:close()
+  return table.concat(pieces, ",")
+end
 
-  if #lines == 0 then
-    return {}, {}
-  end
-
-  local headers = {}
-  for header in string.gmatch(lines[1], "([^,]+)") do
-    table.insert(headers, header)
-  end
-
-  local rows = {}
-  for i = 2, #lines do
-    local fields = {}
-    for field in string.gmatch(lines[i], "([^,]+)") do
-      table.insert(fields, field)
+function parse_csv_line(line)
+  local res = {}
+  local pos = 1
+  while true do
+    -- Quoted field?
+    if string.sub(line, pos, pos) == '"' then
+      local txt = ""
+      local startPos = pos
+      pos = pos + 1
+      while true do
+        local c = string.sub(line, pos, pos)
+        if c == '"' then
+          -- Look ahead for another quote
+          if string.sub(line, pos+1, pos+1) == '"' then
+            -- It's an escaped quote
+            txt = txt .. '"'
+            pos = pos + 2
+          else
+            -- Reached the end of the quoted field
+            pos = pos + 1
+            break
+          end
+        else
+          txt = txt .. c
+          pos = pos + 1
+        end
+      end
+      table.insert(res, txt)
+      -- Skip past comma
+      while string.sub(line, pos, pos) == ' ' do
+        pos = pos + 1
+      end
+      if string.sub(line, pos, pos) == ',' then
+        pos = pos + 1
+      end
+    else
+      -- Unquoted field
+      local startPos = pos
+      while string.sub(line, pos, pos) ~= '' and
+            string.sub(line, pos, pos) ~= ',' do
+        pos = pos + 1
+      end
+      table.insert(res, string.sub(line, startPos, pos - 1))
+      -- Skip the comma
+      if string.sub(line, pos, pos) == ',' then
+        pos = pos + 1
+      end
     end
+    if string.sub(line, pos, pos) == '' then
+      break
+    end
+  end
+  return res
+end
+
+local jobs_headers = {
+  "job_id", "job_type", "status", "job_data", "created_at", "done_at", "retry_count"
+}
+local teams_headers = {
+  "team_number", "nickname", "last_updated", "city", "rookie_year",
+  "rank", "wins", "losses", "ties", "ranking_points", "image_x", "image_y", "image_zoom",
+  "custom_label", "flavor_text", "abilities_list", "attacks_list",
+  "hitpoints", "illustrator", "base_set", "supertype", "type_",
+  "subtype", "variation", "rarity", "subname",
+  "weakness_type", "weakness_amt", "resistance_type", "resistance_amt",
+  "retreat_cost", "icon_text", "total_number_in_set", "custom_regulation_mark_image"
+}
+
+local function read_csv(filename)
+  -- Determine the appropriate headers based on the file name
+  local known_headers
+  if filename == "jobs.csv" then
+    known_headers = jobs_headers
+  elseif filename == "teams.csv" then
+    known_headers = teams_headers
+  else
+    error("Unknown CSV file: " .. filename)
+  end
+
+  -- Open the file
+  local f = io.open(filename, "r")
+  if not f then
+    return {}, known_headers -- Return empty rows with headers
+  end
+
+  -- Read and discard the first line (assumed to be the header)
+  f:read("*l")
+
+  -- Prepare a table for the rows
+  local rows = {}
+
+  -- Read remaining lines manually and parse them into rows
+  for line in f:lines() do
+    line = line:gsub("\r", "")
+    local fields = parse_csv_line(line) -- Use your custom parse_csv_line
+    -- print("DEBUG: Parsed fields =>", json.encode(fields))
+    
+    if #fields ~= #known_headers then
+      error("Row field count does not match header count in file: " .. filename ..
+            ". Fields: " .. json.encode(fields) .. " Headers: " .. json.encode(known_headers))
+    end
+
     local row = {}
-    for idx, h in ipairs(headers) do
-      row[h] = fields[idx] or ""
+    for i, field in ipairs(fields) do
+      row[known_headers[i]] = field -- Map fields to known headers
     end
     table.insert(rows, row)
   end
-  return rows, headers
+
+  -- Close the file
+  f:close()
+
+  -- Debug output
+  -- print("DEBUG: rows =>", json.encode(rows))
+  return rows, known_headers
 end
+
+
+
 
 local function write_jobs_csv(filename, rows, headers)
   local file = io.open(filename, "w")
   if not file then
     return
   end
+  -- Write header line
   file:write(table.concat(headers, ",") .. "\n")
+  -- Write each row
   for _, row in ipairs(rows) do
-    local line_parts = {}
+    local fields = {}
     for _, h in ipairs(headers) do
-      table.insert(line_parts, row[h] or "")
+      table.insert(fields, row[h] or "")
     end
-    file:write(table.concat(line_parts, ",") .. "\n")
+    file:write(to_csv_line(fields) .. "\n")
   end
   file:close()
 end
@@ -85,7 +202,7 @@ local function create_job(job_type, job_data_table, retry_count)
 
   print("Creating new job:", job_type, "for team number:", team_number)
 
-  local rows, headers = read_jobs_csv(JOBS_CSV)
+  local rows, headers = read_csv(JOBS_CSV)
 
   -- Ensure the needed columns exist
   local needed_cols = {"job_id", "job_type", "status", "job_data", "created_at", "done_at", "retry_count"}
@@ -130,6 +247,34 @@ local function create_job(job_type, job_data_table, retry_count)
   return job_id
 end
 
+local function write_csv(filename, rows, headers)
+  local f = io.open(filename, "w")
+  if not f then
+    return nil, "Cannot open file: " .. filename
+  end
+
+  -- You can instantiate a csv 'writer' but typically you'd do something like:
+  -- Write out the header line first:
+  f:write(table.concat(headers, ",") .. "\n")
+
+  -- Then write each row
+  for _, row in ipairs(rows) do
+    local fields = {}
+    for _, h in ipairs(headers) do
+      local val = row[h] or ""
+      -- Escape quotes per CSV spec (same as your old to_csv_line logic)
+      val = val:gsub('"', '""')
+      val = '"' .. val .. '"'
+      table.insert(fields, val)
+    end
+    f:write(table.concat(fields, ",") .. "\n")
+  end
+
+  f:close()
+  return true
+end
+
+
 
 ------------------------------------------------------------------------------
 -- 3. Additional Utility Functions (for teams.csv, TBA fetch, Python call, etc.)
@@ -148,58 +293,121 @@ local function csv_to_row(line, headers)
   return row
 end
 
-local function read_teams_csv(filename)
-  local file = io.open(filename, "r")
-  if not file then
+function read_teams_csv(filename)
+  local f = io.open(filename, "r")
+  if not f then
+    -- Return empty tables if file missing
     return {}, {}
   end
 
-  local lines = {}
-  for line in file:lines() do
-    table.insert(lines, line)
-  end
-  file:close()
-
-  if #lines == 0 then
-    return {}, {}
-  end
-
-  local headers = {}
-  for header in string.gmatch(lines[1], "([^,]+)") do
-    table.insert(headers, header)
-  end
-
+  local reader = csv.open(f, { headers = true })
   local rows = {}
-  for i = 2, #lines do
-    local row = csv_to_row(lines[i], headers)
-    table.insert(rows, row)
+  for fields in reader:lines() do
+    -- fields is a table keyed by header
+    table.insert(rows, fields)
+  end
+  f:close()
+
+  -- Gather headers from the first row (if available)
+  local headers = {}
+  if #rows > 0 then
+    -- rows[1] is like { team_number = "1771", nickname="North Gwinnett Robotics", ... }
+    for colName, _ in pairs(rows[1]) do
+      table.insert(headers, colName)
+    end
+    -- NOTE: pairs() doesn't guarantee a stable order if you need a specific ordering
   end
 
   return rows, headers
 end
 
-local function write_teams_csv(filename, rows, headers)
-  local file = io.open(filename, "w")
-  if not file then
-    return
+
+function write_teams_csv(filename, rows, headers)
+  -- Open the file for writing
+  local f = io.open(filename, "w")
+  if not f then
+    return nil, "Cannot open file: " .. filename
   end
 
-  file:write(table.concat(headers, ",") .. "\n")
-  for _, row in ipairs(rows) do
-    local parts = {}
-    for _, h in ipairs(headers) do
-      table.insert(parts, row[h] or "")
-    end
-    file:write(table.concat(parts, ",") .. "\n")
+  table.sort(rows, function(a, b)
+    local rpA = tonumber(a.ranking_points) or 0
+    local rpB = tonumber(b.ranking_points) or 0
+    return rpA > rpB
+  end)
+  
+  -- 3. Reassign 'rank' from 1..N
+  for i, row in ipairs(rows) do
+    row.rank = i
   end
-  file:close()
+
+  -- Write headers as a row
+  f:write(table.concat(headers, ",") .. "\n")
+
+  -- Write each row
+  for _, row in ipairs(rows) do
+    local line = {}
+    for _, h in ipairs(headers) do
+      local val = tostring(row[h] or "") -- Ensure val is a string
+      -- Escape quotes and wrap in quotes per CSV spec
+      val = '"' .. val:gsub('"', '""') .. '"'
+      table.insert(line, val)
+    end
+    f:write(table.concat(line, ",") .. "\n")
+  end
+
+  -- Close the file
+  f:close()
+  return true
 end
+
 
 -- Basic utility to check file existence
 local function file_exists(path)
   local f = io.open(path, "r")
   if f then f:close() return true end
   return false
+end
+
+local function downscale_images_if_idle()--jobs)
+  -- First, see if there are any active jobs (queued or running).
+  -- If so, we do nothing.
+  -- local has_active = false
+  -- for _, job in ipairs(jobs) do
+  --   if job.status == "queued" or job.status == "running" then
+  --     has_active = true
+  --     break
+  --   end
+  -- end
+
+  -- -- Only proceed if NO active jobs
+  -- if has_active then
+  --   return
+  -- end
+
+  -- Paths
+  local user = "sharkingstudios"
+  local base_dir = "/home/"..user.."/frcfantasyserver/FRC-Fantasy-League/api/robotCards"
+  local size220_dir = base_dir .. "/size220"
+
+  -- Make sure the size220 directory exists
+  lfs.mkdir(size220_dir)
+
+  for file in lfs.dir(base_dir) do
+    -- We only want to look at image files (png, jpg, jpeg, possibly others)
+    if file:match("%.png$") or file:match("%.jpg$") or file:match("%.jpeg$") then
+      local from_path = base_dir .. "/" .. file
+      local to_path   = size220_dir .. "/" .. file
+      
+      -- Check if we already have a 220px version
+      if not file_exists(to_path) then
+        print("No 220px version found for " .. file .. ". Creating it now.")
+        -- Use mogrify to resize to width=220, saving the output in size220_dir
+        -- The -path argument tells mogrify where to put the converted file
+        local cmd = string.format("mogrify -resize 220 -path '%s' '%s'", size220_dir, from_path)
+        os.execute(cmd)
+      end
+    end
+  end
 end
 
 ------------------------------------------------------------------------------
@@ -303,6 +511,65 @@ local function fetch_team_data(team_number)
   return combined
 end
 
+local function fetch_team_data_new(team_number)
+  local team_info = tba_get("team/frc" .. team_number)
+  if type(team_info) == "table" then
+    team_info = team_info[1] or team_info  -- handle possibility
+  end
+  if not team_info then return nil end
+
+  local events = tba_get("team/frc" .. team_number .. "/events/" .. EVENT_YEAR)
+  if not events or #events == 0 then
+    return {
+      team_number = team_number,
+      nickname = team_info.nickname or "",
+      city = team_info.city or "",
+      rookie_year = team_info.rookie_year or 0,
+      rank = 0, wins=0, losses=0, ties=0, ranking_points=0
+    }
+  end
+
+  local best_rank = 999999
+  local total_wins, total_losses, total_ties = 0, 0, 0
+  for _, ev in ipairs(events) do
+    if ev.event_type == 99 then
+      goto continue
+    end
+    local status_info = tba_get("team/frc" .. team_number .. "/event/" .. ev.key .. "/status")
+    if status_info and status_info.qual and status_info.qual.ranking then
+      local q = status_info.qual.ranking
+      local playoff = status_info.playoff
+      local qRec = q.record or {}
+      local pRec = (playoff and playoff.record) or {}
+
+      local eventWins   = (qRec.wins   or 0) + (pRec.wins   or 0)
+      local eventLosses = (qRec.losses or 0) + (pRec.losses or 0)
+      local eventTies   = (qRec.ties   or 0) + (pRec.ties   or 0)
+
+      if q.rank and q.rank < best_rank then
+        best_rank = q.rank
+      end
+      total_wins   = total_wins   + eventWins
+      total_losses = total_losses + eventLosses
+      total_ties   = total_ties   + eventTies
+    end
+    ::continue::
+  end
+
+  local district_points = fetch_district_points(team_number)
+
+  local combined = {
+    team_number    = team_number,
+    rank           = best_rank < 999999 and best_rank or 0,
+    wins           = total_wins,
+    losses         = total_losses,
+    ties           = total_ties,
+    ranking_points = district_points
+  }
+
+  return combined
+end
+
 -- Filter out blank fields from a table
 local function filter_blank_fields(data)
   local filtered_data = {}
@@ -316,12 +583,57 @@ end
 
 local function save_to_csv(team_data)
   local filename = "teams.csv"
-  local rows, headers = read_teams_csv(filename)
+  local rows, headers = read_csv(filename)
 
   local required_cols = {
     "team_number", "nickname", "last_updated", "city", "rookie_year",
-    "rank", "wins", "losses", "ties", "ranking_points",
-    "image_path", "image_x", "image_y", "image_zoom",
+    "rank", "wins", "losses", "ties", "ranking_points", "image_x", "image_y", "image_zoom",
+    "custom_label", "flavor_text", "abilities_list", "attacks_list",
+    "hitpoints", "illustrator", "base_set", "supertype", "type_",
+    "subtype", "variation", "rarity", "subname",
+    "weakness_type", "weakness_amt", "resistance_type", "resistance_amt",
+    "retreat_cost", "icon_text", "total_number_in_set", "custom_regulation_mark_image"
+  }
+
+  -- Ensure required columns exist
+  local header_map = {}
+  for _, h in ipairs(headers) do
+    header_map[h] = true
+  end
+  for _, col in ipairs(required_cols) do
+    if not header_map[col] then
+      table.insert(headers, col)
+      header_map[col] = true
+    end
+  end
+
+  -- Update or add the row
+  local row_map = {}
+  for _, row in ipairs(rows) do
+    row_map[row.team_number] = row
+  end
+
+  local key = tostring(team_data.team_number)
+  local row = row_map[key]
+  if not row then
+    row = {}
+    table.insert(rows, row)
+  end
+
+  for _, col in ipairs(required_cols) do
+    row[col] = team_data[col] or row[col] or ""
+  end
+
+  write_teams_csv(filename, rows, headers)
+end
+
+local function save_to_csv_new(team_data)
+  local filename = "teams.csv"
+  local rows, headers = read_csv(filename)
+
+  local required_cols = {
+    "team_number", "nickname", "last_updated", "city", "rookie_year",
+    "rank", "wins", "losses", "ties", "ranking_points", "image_x", "image_y", "image_zoom",
     "custom_label", "flavor_text", "abilities_list", "attacks_list",
     "hitpoints", "illustrator", "base_set", "supertype", "type_",
     "subtype", "variation", "rarity", "subname",
@@ -364,22 +676,36 @@ end
 
 -- Build card data for the Python service
 local function build_card_data_from_csv(team_number)
-  local rows, headers = read_teams_csv("teams.csv")
+  local rows, headers = read_csv("teams.csv")
   for _, row in ipairs(rows) do
     if row.team_number == tostring(team_number) then
-      local image_path = row.image_path
-      if not image_path or image_path == "" then
-        local png_path = "./images/robotImages/" .. row.team_number .. ".png"
-        if file_exists(png_path) then
-          image_path = png_path
+      -- local image_path = row.image_path
+
+      local png_path = "./images/robotImages/" .. row.team_number .. ".png"
+      if file_exists(png_path) then
+        image_path = png_path
+      else
+        local jpeg_path = "./images/robotImages/" .. row.team_number .. ".jpeg"
+        if file_exists(jpeg_path) then
+          image_path = jpeg_path
         else
-          local jpeg_path = "./images/robotImages/" .. row.team_number .. ".jpeg"
-          if file_exists(jpeg_path) then
-            image_path = jpeg_path
-          else
-            image_path = "./images/robotImages/default.png"
-          end
+          image_path = "./images/robotImages/default.png"
         end
+
+      end
+
+      if image_path == "./images/robotImages/default.png" then
+        print("No image found for team_number=", team_number)
+        row.image_x = 0
+        row.image_y = -80
+        row.image_zoom = 0.6
+      end
+
+      local custom_label
+      if row.custom_label == "" then
+        custom_label = row.nickname or ("No. " .. row.team_number .. " FRC")
+      else
+        custom_label = row.custom_label
       end
 
       -- Build card data
@@ -390,7 +716,7 @@ local function build_card_data_from_csv(team_number)
         image_x = tonumber(row.image_x),
         image_y = tonumber(row.image_y),
         image_zoom = tonumber(row.image_zoom),
-        custom_label = row.custom_label,
+        custom_label = custom_label,
         flavor_text = row.flavor_text,
         abilities_list = row.abilities_list and json.decode(row.abilities_list),
         attacks_list = row.attacks_list and json.decode(row.attacks_list),
@@ -457,10 +783,26 @@ end
 
 local function updateCardForTeam(team_number)
   -- Fetch data and update `teams.csv`
-  local tba_data = fetch_team_data(team_number)
-  if tba_data then
-    tba_data.last_updated = os.time() -- Set last updated timestamp
-    save_to_csv(tba_data) -- Save updated team data
+  
+  
+  local rows, headers = read_csv("teams.csv")
+  local team_exists = false
+  for _, row in ipairs(rows) do
+    if row.team_number == tostring(team_number) then team_exists = true end
+  end
+  
+  if not team_exists then
+    local tba_data = fetch_team_data(team_number)
+    if tba_data then
+      tba_data.last_updated = os.time() -- Set last updated timestamp
+      save_to_csv(tba_data) -- Save updated team data
+    end
+  else
+    local tba_data = fetch_team_data_new(team_number)
+    if tba_data then
+      tba_data.last_updated = os.time() -- Set last updated timestamp
+      save_to_csv_new(tba_data) -- Save updated team data
+    end
   end
 
   -- Build card data and create the card
@@ -487,7 +829,7 @@ end
 local function do_update_all_cards()
   print("Doing updateAllCards...")
   -- Possibly read "teams.csv" and call updateCardForTeam for each row
-  local all_rows, headers = read_teams_csv("teams.csv")
+  local all_rows, headers = read_csv("teams.csv")
   local any_error = false
   -- local message = "All cards updated"
   local message = "Please dont use this lol. It breaks a lot."
@@ -526,6 +868,7 @@ local function save_new_team_data(team_number)
     for i, row in ipairs(rows) do
       row.rank = i
     end
+    
     -- 4. Write it back out
     write_csv(filename, rows, headers)
   end
@@ -537,7 +880,7 @@ end
 
 while true do
   -- Read the latest state of the file
-  local rows, headers = read_jobs_csv(JOBS_CSV)
+  local rows, headers = read_csv(JOBS_CSV)
   local changed = false
   local now = os.time()
 
@@ -559,6 +902,13 @@ while true do
       local job_data = json.decode(row.job_data) or {}
       local success, message = false, "unknown"
 
+      -- print("DEBUG: raw job_data =>", row.job_data)
+      if not job_data.team_number then
+        -- print("DEBUG: json.decode failed or team_number missing!")
+      else
+        -- print("DEBUG: team_number =>", job_data.team_number)
+      end
+
       if row.job_type == "updateOneCard" then
         local team_number = job_data.team_number
         success, message = do_update_one_card(team_number)
@@ -574,6 +924,7 @@ while true do
       if success then
         row.status = "OK"
         row.job_data = json.encode({ info = message })
+        os.execute("rm /home/sharkingstudios/frcfantasyserver/FRC-Fantasy-League/api/robotCards/size220/"..job_data.team_number..".png")
       else
         row.status = "ERROR"
         row.job_data = json.encode({ error = message })
@@ -602,7 +953,7 @@ while true do
 
   if changed then
     -- Re-read the latest file and merge changes
-    local latest_rows, _ = read_jobs_csv(JOBS_CSV)
+    local latest_rows, _ = read_csv(JOBS_CSV)
     local latest_job_ids = {}
     for _, row in ipairs(latest_rows) do
       latest_job_ids[row.job_id] = row
@@ -618,6 +969,8 @@ while true do
     -- Write back the updated state
     write_jobs_csv(JOBS_CSV, new_rows, headers)
   end
+
+  downscale_images_if_idle()
 
   os.execute("sleep 2")
 end
